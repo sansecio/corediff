@@ -179,7 +179,7 @@ func walk(root string, db hashDB, args *Args) {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Printf("failure accessing a path %q: %v\n", path, err)
-			return err
+			return nil
 		}
 		if info.IsDir() {
 			return nil
