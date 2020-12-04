@@ -11,6 +11,21 @@ Corediff was created by [Sansec](https://sansec.io/?corediff), specialists in Ma
 
 # Usage
 
+
+```
+Usage:
+  corediff [OPTIONS] <path>...
+
+Application Options:
+  -d, --database= Hash database path (default: download Sansec database)
+  -a, --add       Add new hashes to DB, do not check
+  -f, --full      Scan everything, not just core paths.
+  -v, --verbose   Show what is going on
+
+Help Options:
+  -h, --help      Show this help message
+```
+
 In the following example, Corediff reports a malicious backdoor in `cron.php`:
 
 ![](https://buq.eu/screenshots/y76R3uN9CrCFN6GEji4uSPtM.png)
