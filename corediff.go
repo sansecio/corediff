@@ -2,98 +2,23 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"crypto/md5"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
-
-	"log"
-
-	"github.com/fatih/color"
-	"github.com/gwillem/urlfilecache"
-	"github.com/jessevdk/go-flags"
 )
 
-type hashDB map[[16]byte]bool
+func loadDB(path string) hashDB {
 
-const (
-	hashDBURL = "https://sansec.io/ext/files/corediff.bin"
-)
+	m := make(hashDB)
 
-var (
-	boldred   = color.New(color.FgHiRed, color.Bold).SprintFunc()
-	grey      = color.New(color.FgHiBlack).SprintFunc()
-	boldwhite = color.New(color.FgHiWhite).SprintFunc()
-	alarm     = color.New(color.FgHiWhite, color.BgHiRed, color.Bold).SprintFunc()
-
-	globalDB hashDB
-
-	scanExts  = []string{"php", "phtml", "js", "htaccess", "sh"}
-	skipLines = [][]byte{
-		[]byte("*"),
-		[]byte("/*"),
-		[]byte("//"),
-		[]byte("#"),
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return m
 	}
-
-	cmsPaths = []string{
-		"/app/etc/local.xml",
-		"/app/etc/env.php",
-		"/wp-config.php",
-	}
-
-	highlightPatterns = []string{
-		`\$_[A-Z]`,
-		`["']\s*\.\s*['"]`,
-		`die\(`,
-		`base64_`,
-		`@(unlink|include|mysql)`,
-		`../../..`,
-		`hex2bin`,
-		`fopen`,
-		`file_put_contents`,
-		`file_get_contents`,
-	}
-)
-
-type Args struct {
-	Path struct {
-		Path string `positional-arg-name:"<path>"`
-	} `positional-args:"yes" description:"Scan file or dir" required:"true"`
-	Full    bool `short:"f" long:"full" description:"Scan everything, not just core paths."`
-	Verbose bool `short:"v" long:"verbose" description:"Show what is going on"`
-}
-
-func hash(b []byte) [16]byte {
-	return md5.Sum(b)
-}
-
-func normalizeLine(b []byte) []byte {
-	// Also strip slashes comments etc
-	b = bytes.TrimSpace(b)
-	for _, prefix := range skipLines {
-		if bytes.HasPrefix(b, prefix) {
-			return []byte{}
-		}
-	}
-	return b
-}
-
-func check(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func loadDB() hashDB {
-	f, err := os.Open(urlfilecache.ToPath(hashDBURL))
 	check(err)
 	defer f.Close()
 	reader := bufio.NewReader(f)
-	m := make(hashDB)
 	for {
 		b := make([]byte, 16)
 		n, err := reader.Read(b)
@@ -108,23 +33,23 @@ func loadDB() hashDB {
 	return m
 }
 
-func shouldHighlight(b []byte) bool {
-	for _, p := range highlightPatterns {
-		m, _ := regexp.Match(p, b)
-		if m {
-			return true
+func saveDB(path string, db hashDB) {
+	f, err := os.Create(path)
+	defer f.Close()
+	check(err)
+	for k := range db {
+		n, err := f.Write(k[:])
+		check(err)
+		if n != 16 {
+			log.Fatal("Wrote unexpected number of bytes?")
 		}
 	}
-	return false
 }
 
-func parseFile(path string, db hashDB) {
+func parseFile(path, relPath string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
 	fh, err := os.Open(path)
 	check(err)
 	defer fh.Close()
-
-	hits := []int{}
-	lines := [][]byte{}
 
 	maxTokenSize := 1024 * 1024 * 10 // 10MB
 	scanner := bufio.NewScanner(fh)
@@ -138,6 +63,9 @@ func parseFile(path string, db hashDB) {
 		h := hash(normalizeLine(l))
 		if !db[h] {
 			hits = append(hits, i)
+			if updateDB {
+				db[h] = true
+			}
 		}
 	}
 
@@ -145,38 +73,19 @@ func parseFile(path string, db hashDB) {
 		log.Fatal(err)
 	}
 
-	if len(hits) > 0 {
-		fmt.Println(boldred("\n>>>> " + path))
-		for _, idx := range hits {
-			// fmt.Println(string(lines[idx]))
-			if shouldHighlight(lines[idx]) {
-				fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
-
-			} else {
-				fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
-			}
-		}
-		fmt.Println()
-	}
+	return hits, lines
 }
 
-func hasValidExt(path string) bool {
-	got := strings.TrimLeft(filepath.Ext(path), ".")
-	for _, want := range scanExts {
-		if got == want {
-			return true
-		}
-	}
-	return false
-}
-
-func isRelPathInDB(relPath string, db hashDB) bool {
-	key := "path:" + relPath
-	return db[hash([]byte(key))]
-}
-
-func walk(root string, db hashDB, args *Args) {
+func checkPath(root string, db hashDB, args *Args) *walkStats {
+	stats := &walkStats{}
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		var relPath string
+		if path == root {
+			relPath = root
+		} else {
+			relPath = path[len(root)+1:]
+		}
+
 		if err != nil {
 			fmt.Printf("failure accessing a path %q: %v\n", path, err)
 			return nil
@@ -184,95 +93,120 @@ func walk(root string, db hashDB, args *Args) {
 		if info.IsDir() {
 			return nil
 		}
+
+		stats.totalFiles++
+
 		if !hasValidExt(path) {
+			logVerbose(grey(" ? ", relPath))
 			return nil
 		}
 
 		// Only do path checking for non-root elts
-		if !args.Full {
-			relPath := path[len(root)+1:]
-			if !isRelPathInDB(relPath, db) {
-				if args.Verbose {
-					fmt.Println("Skipping:", relPath)
-				}
+		if path != root && !args.Full {
+			if !db[pathHash(relPath)] {
+				logVerbose(grey(" ? ", relPath))
 				return nil
 			}
 		}
 
-		parseFile(path, db)
+		hits, lines := parseFile(path, relPath, db, false)
+		if len(hits) > 0 {
+			stats.filesWithChanges++
+			logInfo(boldred("\n X " + relPath))
+			for _, idx := range hits {
+				// fmt.Println(string(lines[idx]))
+				if shouldHighlight(lines[idx]) {
+					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
+					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
+
+				} else {
+					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
+					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
+				}
+			}
+			logInfo()
+		} else {
+			stats.filesWithoutChanges++
+			logVerbose(green(" V " + relPath))
+		}
+
 		return nil
 	})
 	check(err)
+	return stats
 }
 
-func isCmsRoot(root string) bool {
-	for _, testPath := range cmsPaths {
-		full := root + testPath
-		if pathExists(full) {
-			return true
-		}
-	}
-	return false
-}
+func addPath(root string, db hashDB, args *Args) {
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		var relPath string
 
-func pathExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
-
-func isDir(path string) bool {
-	fi, err := os.Stat(path)
-	return err == nil && fi.IsDir()
-}
-func setup() *Args {
-
-	var err error
-	color.NoColor = false
-
-	args := &Args{}
-	argParser := flags.NewParser(args, flags.HelpFlag|flags.PrintErrors|flags.PassDoubleDash)
-	if _, err := argParser.Parse(); err != nil {
-		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrRequired {
+		if path == root {
+			relPath = root
 		} else {
-			// log.Fatal(err)
-			// fmt.Println("Config parse error:", err)
+			relPath = path[len(root)+1:]
 		}
-		os.Exit(1)
-	}
 
-	// postprocessing
-	args.Path.Path, err = filepath.Abs(args.Path.Path)
+		if err != nil {
+			fmt.Printf("failure accessing a path %q: %v\n", path, err)
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		if !hasValidExt(path) {
+			logVerbose(grey(" - ", relPath, " (no code)"))
+			return nil
+		}
+
+		// if relPath has valid ext, add hash of "path:<relPath>" to db
+		if path != root {
+			db[pathHash(relPath)] = true
+		}
+
+		hits, _ := parseFile(path, relPath, db, true)
+		if len(hits) > 0 {
+			logVerbose(green(" U " + relPath))
+		} else {
+			logVerbose(grey(" - " + relPath))
+		}
+
+		return nil
+	})
 	check(err)
-	args.Path.Path, err = filepath.EvalSymlinks(args.Path.Path)
-	check(err)
 
-	if !pathExists(args.Path.Path) {
-		fmt.Println("Path", args.Path.Path, "does not exist?")
-		os.Exit(1)
-	}
-
-	// Enforce scanning is target is just a single file
-	if !isDir(args.Path.Path) {
-		args.Full = true
-	}
-
-	// Basic check for application root?
-	if !args.Full && !isCmsRoot(args.Path.Path) {
-		fmt.Println("Path does not seem to be an application root path, so we cannot check official root paths.")
-		fmt.Println("Try again with proper root path, or do a full scan with --full")
-		os.Exit(1)
-	}
-
-	return args
 }
 
 func main() {
 
 	args := setup()
-	db := loadDB()
+	db := loadDB(args.Database)
 
-	fmt.Print(boldwhite(fmt.Sprintln("\nMagento Corediff loaded", len(db),
-		"precomputed hashes. (C) 2020 info@sansec.io")))
+	logInfo(boldwhite("\nMagento Corediff loaded ", len(db), " precomputed hashes. (C) 2020 info@sansec.io"))
+	logInfo("Using database:", args.Database, "\n")
 
-	walk(args.Path.Path, db, args)
+	if args.Add {
+		oldSize := len(db)
+		for _, path := range args.Path.Path {
+			logInfo("Calculating checksums for", args.Path.Path, "\n")
+			addPath(path, db, args)
+			logInfo()
+		}
+		if len(db) != oldSize {
+			logInfo("Computed", len(db)-oldSize, "new hashes, saving to", args.Database, "..")
+			saveDB(args.Database, db)
+		} else {
+			logInfo("Found no new code hashes...")
+		}
+	} else {
+		for _, path := range args.Path.Path {
+			stats := checkPath(path, db, args)
+			logInfo("\n===============================================================================")
+			logInfo(" Corediff completed scanning", stats.totalFiles, "files in", path)
+			logInfo(" - Files with unrecognized lines   :", boldred(stats.filesWithChanges))
+			logInfo(" - Files with only recognized lines:", green(stats.filesWithoutChanges))
+			logInfo(" - Other files                     :", stats.totalFiles-stats.filesWithChanges-stats.filesWithoutChanges, "(non-executable or custom code)")
+		}
+	}
+	logInfo()
 }
