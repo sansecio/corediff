@@ -10,7 +10,6 @@ import (
 	"github.com/jessevdk/go-flags"
 )
 
-
 type (
 	hashDB map[[16]byte]bool
 
@@ -22,7 +21,7 @@ type (
 
 	Args struct {
 		Path struct {
-			Path string `positional-arg-name:"<path>"`
+			Path []string `positional-arg-name:"<path>"`
 		} `positional-args:"yes" description:"Scan file or dir" required:"true"`
 		Database string `short:"d" long:"database" description:"Hash database path (default: download Sansec database)"`
 		Add      bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
@@ -98,28 +97,30 @@ func setup() *Args {
 		args.Database = urlfilecache.ToPath(hashDBURL)
 	}
 
+	for i, path := range args.Path.Path {
+		path, err = filepath.Abs(path)
+		check(err)
+		path, err = filepath.EvalSymlinks(path)
+		check(err)
+
+		if !pathExists(path) {
+			fmt.Println("Path", path, "does not exist?")
+			os.Exit(1)
+		}
+
+		if !args.Full && !isCmsRoot(path) {
+			fmt.Println("!!!", path)
+			fmt.Println("Path does not seem to be an application root path, so we cannot check official root paths.")
+			fmt.Println("Try again with proper root path, or do a full scan with --full")
+			os.Exit(1)
+		}
+
+		args.Path.Path[i] = path
+	}
+
 	// postprocessing
-	args.Path.Path, err = filepath.Abs(args.Path.Path)
-	check(err)
-	args.Path.Path, err = filepath.EvalSymlinks(args.Path.Path)
-	check(err)
-
-	if !pathExists(args.Path.Path) {
-		fmt.Println("Path", args.Path.Path, "does not exist?")
-		os.Exit(1)
-	}
-
-	// Enforce scanning is target is just a single file
-	if !isDir(args.Path.Path) {
-		args.Full = true
-	}
 
 	// Basic check for application root?
-	if !args.Full && !isCmsRoot(args.Path.Path) {
-		fmt.Println("Path does not seem to be an application root path, so we cannot check official root paths.")
-		fmt.Println("Try again with proper root path, or do a full scan with --full")
-		os.Exit(1)
-	}
 
 	return args
 }

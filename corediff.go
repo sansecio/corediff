@@ -102,7 +102,7 @@ func checkPath(root string, db hashDB, args *Args) *walkStats {
 		}
 
 		// Only do path checking for non-root elts
-		if !args.Full {
+		if path != root && !args.Full {
 			if !db[pathHash(relPath)] {
 				logVerbose(grey(" ? ", relPath))
 				return nil
@@ -187,9 +187,11 @@ func main() {
 
 	if args.Add {
 		oldSize := len(db)
-		logInfo("Calculating checksums for", args.Path.Path, "\n")
-		addPath(args.Path.Path, db, args)
-		logInfo()
+		for _, path := range args.Path.Path {
+			logInfo("Calculating checksums for", args.Path.Path, "\n")
+			addPath(path, db, args)
+			logInfo()
+		}
 		if len(db) != oldSize {
 			logInfo("Computed", len(db)-oldSize, "new hashes, saving to", args.Database, "..")
 			saveDB(args.Database, db)
@@ -197,12 +199,14 @@ func main() {
 			logInfo("Found no new code hashes...")
 		}
 	} else {
-		stats := checkPath(args.Path.Path, db, args)
-		logInfo("\n===============================================================================")
-		logInfo(" Corediff completed scanning", stats.totalFiles, "files.")
-		logInfo("  - Files with unrecognized lines   :", boldred(stats.filesWithChanges))
-		logInfo("  - Files with only recognized lines:", green(stats.filesWithoutChanges))
-		logInfo("  - Other files                     :", stats.totalFiles-stats.filesWithChanges-stats.filesWithoutChanges, "(non-executable or custom code)")
+		for _, path := range args.Path.Path {
+			stats := checkPath(path, db, args)
+			logInfo("\n===============================================================================")
+			logInfo(" Corediff completed scanning", stats.totalFiles, "files in", path)
+			logInfo("  - Files with unrecognized lines   :", boldred(stats.filesWithChanges))
+			logInfo("  - Files with only recognized lines:", green(stats.filesWithoutChanges))
+			logInfo("  - Other files                     :", stats.totalFiles-stats.filesWithChanges-stats.filesWithoutChanges, "(non-executable or custom code)")
+		}
 	}
 	logInfo()
 }
