@@ -11,9 +11,9 @@ Corediff was created by [Sansec](https://sansec.io/?corediff), specialists in Ma
 
 # Usage
 
-In the following example, Corediff reports a malicious backdoor in `app/Mage.php`:
+In the following example, Corediff reports a malicious backdoor in `cron.php`:
 
-![](https://buq.eu/screenshots/mfkxTmwgKl1gUZ9Gv8oxvtEe.png)
+![](https://buq.eu/screenshots/y76R3uN9CrCFN6GEji4uSPtM.png)
 
 In default mode, Corediff will only check official Magento paths. In order to find these, you should point Corediff to the root of a Magento installation. 
 
@@ -35,6 +35,16 @@ go run corediff.go <magento_path>
 ```
 
 At the first run, `corediff` will automatically download the Sansec hash database (~26MB).
+
+# Contributing
+
+Adding hashes? This will create/update a database with all (new) hashes from `<path>`.
+
+```
+corediff --database=customd.db --add <path>
+```
+
+Contributions welcome! Naturally, we only accept hashes from trusted sources. [Contact us](mailto:info@sansec.io).
 
 # About Sansec
 

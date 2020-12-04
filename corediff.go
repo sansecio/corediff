@@ -203,9 +203,9 @@ func main() {
 			stats := checkPath(path, db, args)
 			logInfo("\n===============================================================================")
 			logInfo(" Corediff completed scanning", stats.totalFiles, "files in", path)
-			logInfo("  - Files with unrecognized lines   :", boldred(stats.filesWithChanges))
-			logInfo("  - Files with only recognized lines:", green(stats.filesWithoutChanges))
-			logInfo("  - Other files                     :", stats.totalFiles-stats.filesWithChanges-stats.filesWithoutChanges, "(non-executable or custom code)")
+			logInfo(" - Files with unrecognized lines   :", boldred(stats.filesWithChanges))
+			logInfo(" - Files with only recognized lines:", green(stats.filesWithoutChanges))
+			logInfo(" - Other files                     :", stats.totalFiles-stats.filesWithChanges-stats.filesWithoutChanges, "(non-executable or custom code)")
 		}
 	}
 	logInfo()
