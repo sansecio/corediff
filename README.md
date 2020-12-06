@@ -46,7 +46,7 @@ Or compile from source (requires Go 1.13+):
 ```sh
 git clone https://github.com/sansecio/magento-corediff.git
 cd magento-corediff
-go run corediff.go <magento_path>
+go run . <magento_path>
 ```
 
 At the first run, `corediff` will automatically download the Sansec hash database (~26MB).

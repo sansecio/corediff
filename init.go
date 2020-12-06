@@ -19,12 +19,13 @@ type (
 		filesWithoutChanges int
 	}
 
-	Args struct {
+	baseArgs struct {
 		Path struct {
-			Path []string `positional-arg-name:"<path>"`
+			Path []string `positional-arg-name:"<path>" required:"1"`
 		} `positional-args:"yes" description:"Scan file or dir" required:"true"`
 		Database string `short:"d" long:"database" description:"Hash database path (default: download Sansec database)"`
 		Add      bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
+		Merge    bool   `short:"m" long:"merge" description:"Merge databases"`
 		Full     bool   `short:"f" long:"full" description:"Scan everything, not just core paths."`
 		Verbose  bool   `short:"v" long:"verbose" description:"Show what is going on"`
 	}
@@ -73,12 +74,12 @@ var (
 	}
 )
 
-func setup() *Args {
+func setup() *baseArgs {
 
 	var err error
 	color.NoColor = false
 
-	args := &Args{}
+	args := &baseArgs{}
 	argParser := flags.NewParser(args, flags.HelpFlag|flags.PrintErrors|flags.PassDoubleDash)
 	if _, err := argParser.Parse(); err != nil {
 		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrRequired {
@@ -94,6 +95,10 @@ func setup() *Args {
 	}
 
 	if args.Database == "" {
+		if args.Merge {
+			fmt.Println("Can't merge without given --database file")
+			os.Exit(1)
+		}
 		args.Database = urlfilecache.ToPath(hashDBURL)
 	}
 
@@ -108,7 +113,7 @@ func setup() *Args {
 			os.Exit(1)
 		}
 
-		if !args.Full && !isCmsRoot(path) {
+		if !args.Merge && !args.Full && !isCmsRoot(path) {
 			fmt.Println("!!!", path)
 			fmt.Println("Path does not seem to be an application root path, so we cannot check official root paths.")
 			fmt.Println("Try again with proper root path, or do a full scan with --full")
@@ -117,10 +122,6 @@ func setup() *Args {
 
 		args.Path.Path[i] = path
 	}
-
-	// postprocessing
-
-	// Basic check for application root?
 
 	return args
 }

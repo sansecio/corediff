@@ -76,7 +76,7 @@ func parseFile(path, relPath string, db hashDB, updateDB bool) (hits []int, line
 	return hits, lines
 }
 
-func checkPath(root string, db hashDB, args *Args) *walkStats {
+func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 	stats := &walkStats{}
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		var relPath string
@@ -94,12 +94,12 @@ func checkPath(root string, db hashDB, args *Args) *walkStats {
 			return nil
 		}
 
-		stats.totalFiles++
-
 		if !hasValidExt(path) {
-			logVerbose(grey(" ? ", relPath))
+			// logVerbose(grey(" ? ", relPath))
 			return nil
 		}
+
+		stats.totalFiles++
 
 		// Only do path checking for non-root elts
 		if path != root && !args.Full {
@@ -136,7 +136,7 @@ func checkPath(root string, db hashDB, args *Args) *walkStats {
 	return stats
 }
 
-func addPath(root string, db hashDB, args *Args) {
+func addPath(root string, db hashDB, args *baseArgs) {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		var relPath string
 
@@ -185,7 +185,17 @@ func main() {
 	logInfo(boldwhite("\nMagento Corediff loaded ", len(db), " precomputed hashes. (C) 2020 info@sansec.io"))
 	logInfo("Using database:", args.Database, "\n")
 
-	if args.Add {
+	if args.Merge {
+		for _, p := range args.Path.Path {
+			db2 := loadDB(p)
+			logInfo("Merging", filepath.Base(p), "with", len(db2), "entries ..")
+			for k := range db2 {
+				db[k] = true
+			}
+		}
+		logInfo("Saving", args.Database, "with a total of", len(db), "entries.")
+		saveDB(args.Database, db)
+	} else if args.Add {
 		oldSize := len(db)
 		for _, path := range args.Path.Path {
 			logInfo("Calculating checksums for", args.Path.Path, "\n")

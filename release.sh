@@ -23,6 +23,7 @@ function chronic {
 chronic go build -o ~/bin/corediff 
 chronic upx -qq ~/bin/corediff 
 chronic rsync ~/bin/corediff mogo:/data/www/ecomscan
+#chronic rsync corediff.bin willem.h:sansec/ext/files/corediff.bin
 
 echo
 echo 'Finished! Run:'

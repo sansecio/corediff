@@ -13,6 +13,11 @@ func digest(b [16]byte) string {
 	return fmt.Sprintf("%x", b)
 }
 
+func Test_parseFile(t *testing.T) {
+	hits, lines := parseFile("fixture/odd-encoding.js", "n/a", hashDB{}, false)
+	fmt.Println("succeeded", len(hits), len(lines))
+}
+
 func Test_hash(t *testing.T) {
 	tests := []struct {
 		args []byte
