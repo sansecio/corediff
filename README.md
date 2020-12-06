@@ -14,16 +14,14 @@ Corediff was created by [Sansec](https://sansec.io/?corediff), specialists in Ma
 
 ```
 Usage:
-  corediff [OPTIONS] <path>...
+  magento-corediff [OPTIONS] <path>...
 
 Application Options:
-  -d, --database= Hash database path (default: download Sansec database)
-  -a, --add       Add new hashes to DB, do not check
-  -f, --full      Scan everything, not just core paths.
-  -v, --verbose   Show what is going on
-
-Help Options:
-  -h, --help      Show this help message
+  -d, --database=     Hash database path (default: download Sansec database)
+  -a, --add           Add new hashes to DB, do not check
+  -m, --merge         Merge databases
+  -i, --ignore-paths  Scan everything, not just core paths.
+  -v, --verbose       Show what is going on
 ```
 
 In the following example, Corediff reports a malicious backdoor in `cron.php`:
@@ -32,7 +30,7 @@ In the following example, Corediff reports a malicious backdoor in `cron.php`:
 
 In default mode, Corediff will only check official Magento paths. In order to find these, you should point Corediff to the root of a Magento installation. 
 
-Alternatively you can scan all files with the `--full` option. NB this will produce more output and requires more interpretation by a developer or forensic analyst.  
+Alternatively you can scan all files with the `--ignore-paths` option. NB this will produce more output and requires more interpretation by a developer or forensic analyst.
 
 # Installation
 
@@ -53,13 +51,20 @@ At the first run, `corediff` will automatically download the Sansec hash databas
 
 # Contributing
 
-Adding hashes? This will create/update a database with all (new) hashes from `<path>`.
+Adding or maintaining hashes?
 
-```
-corediff --database=customd.db --add <path>
+
+```bash
+# Create or update custom.db with all hashes from `<path>`.
+corediff --database=custom.db --add <path>
+
+# Merge databases for release
+corediff --database=all.db --merge magento1.db magento2.db *.db
 ```
 
-Contributions welcome! Naturally, we only accept hashes from trusted sources. [Contact us](mailto:info@sansec.io).
+In some cases, it is better to not add file paths to the hash database. All paths found in the database will be examined and reported in default mode. Should many varieties exist for a particular file (such as in DI/compiled code), we would rather exclude its scanning from default output, until we can be reasonably certain to have coverage for 99%+ versions out there. So for volatile paths, use the `--add --ignore-paths` options.
+
+Contributions welcome! Naturally, we only accept hashes from trusted sources. [Contact us to discuss your contribution](mailto:info@sansec.io).
 
 # About Sansec
 

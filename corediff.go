@@ -102,7 +102,7 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 		stats.totalFiles++
 
 		// Only do path checking for non-root elts
-		if path != root && !args.Full {
+		if path != root && !args.IgnorePaths {
 			if !db[pathHash(relPath)] {
 				logVerbose(grey(" ? ", relPath))
 				return nil
@@ -159,8 +159,9 @@ func addPath(root string, db hashDB, args *baseArgs) {
 			return nil
 		}
 
-		// if relPath has valid ext, add hash of "path:<relPath>" to db
-		if path != root {
+		// If relPath has valid ext, add hash of "path:<relPath>" to db
+		// Never add root path (possibly file)
+		if !args.IgnorePaths && path != root {
 			db[pathHash(relPath)] = true
 		}
 

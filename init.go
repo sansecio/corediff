@@ -23,11 +23,11 @@ type (
 		Path struct {
 			Path []string `positional-arg-name:"<path>" required:"1"`
 		} `positional-args:"yes" description:"Scan file or dir" required:"true"`
-		Database string `short:"d" long:"database" description:"Hash database path (default: download Sansec database)"`
-		Add      bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
-		Merge    bool   `short:"m" long:"merge" description:"Merge databases"`
-		Full     bool   `short:"f" long:"full" description:"Scan everything, not just core paths."`
-		Verbose  bool   `short:"v" long:"verbose" description:"Show what is going on"`
+		Database    string `short:"d" long:"database" description:"Hash database path (default: download Sansec database)"`
+		Add         bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
+		Merge       bool   `short:"m" long:"merge" description:"Merge databases"`
+		IgnorePaths bool   `short:"i" long:"ignore-paths" description:"Scan everything, not just core paths."`
+		Verbose     bool   `short:"v" long:"verbose" description:"Show what is going on"`
 	}
 )
 
@@ -58,6 +58,7 @@ var (
 		"/app/etc/local.xml",
 		"/app/etc/env.php",
 		"/wp-config.php",
+		"/lib/internal/Magento",
 	}
 
 	highlightPatterns = []string{
@@ -113,10 +114,10 @@ func setup() *baseArgs {
 			os.Exit(1)
 		}
 
-		if !args.Merge && !args.Full && !isCmsRoot(path) {
+		if !args.Merge && !args.IgnorePaths && !isCmsRoot(path) {
 			fmt.Println("!!!", path)
 			fmt.Println("Path does not seem to be an application root path, so we cannot check official root paths.")
-			fmt.Println("Try again with proper root path, or do a full scan with --full")
+			fmt.Println("Try again with proper root path, or do a full scan with --ignore-paths")
 			os.Exit(1)
 		}
 
