@@ -21,6 +21,7 @@ Application Options:
   -a, --add           Add new hashes to DB, do not check
   -m, --merge         Merge databases
   -i, --ignore-paths  Scan everything, not just core paths.
+      --no-cms        Don't check for CMS root when adding hashes. Do add file paths.
   -v, --verbose       Show what is going on
 ```
 
