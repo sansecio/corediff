@@ -24,6 +24,7 @@ type (
 			Path []string `positional-arg-name:"<path>"`
 		} `positional-args:"yes" description:"Scan file or dir" required:"true"`
 		Database string `short:"d" long:"database" description:"Hash database path (default: download Sansec database)"`
+		Nocms bool `short:"n" long:"nocms" description:"Disable CMS check (for indexing extension directories)"`
 		Add      bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
 		Full     bool   `short:"f" long:"full" description:"Scan everything, not just core paths."`
 		Verbose  bool   `short:"v" long:"verbose" description:"Show what is going on"`
@@ -108,7 +109,7 @@ func setup() *Args {
 			os.Exit(1)
 		}
 
-		if !args.Full && !isCmsRoot(path) {
+		if !args.Full && !args.Nocms && !isCmsRoot(path) {
 			fmt.Println("!!!", path)
 			fmt.Println("Path does not seem to be an application root path, so we cannot check official root paths.")
 			fmt.Println("Try again with proper root path, or do a full scan with --full")
