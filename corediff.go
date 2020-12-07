@@ -94,16 +94,18 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 			return nil
 		}
 
+		stats.totalFiles++
+
 		if !hasValidExt(path) {
+			stats.filesNoCode++
 			// logVerbose(grey(" ? ", relPath))
 			return nil
 		}
 
-		stats.totalFiles++
-
 		// Only do path checking for non-root elts
 		if path != root && !args.IgnorePaths {
 			if !db[pathHash(relPath)] {
+				stats.filesCustomCode++
 				logVerbose(grey(" ? ", relPath))
 				return nil
 			}
@@ -161,7 +163,7 @@ func addPath(root string, db hashDB, args *baseArgs) {
 
 		// If relPath has valid ext, add hash of "path:<relPath>" to db
 		// Never add root path (possibly file)
-		if !args.IgnorePaths && path != root {
+		if !args.IgnorePaths && path != root && !pathIsExcluded(relPath) {
 			db[pathHash(relPath)] = true
 		}
 
@@ -199,7 +201,7 @@ func main() {
 	} else if args.Add {
 		oldSize := len(db)
 		for _, path := range args.Path.Path {
-			logInfo("Calculating checksums for", args.Path.Path, "\n")
+			logInfo("Calculating checksums for", path, "\n")
 			addPath(path, db, args)
 			logInfo()
 		}
@@ -216,7 +218,8 @@ func main() {
 			logInfo(" Corediff completed scanning", stats.totalFiles, "files in", path)
 			logInfo(" - Files with unrecognized lines   :", boldred(stats.filesWithChanges))
 			logInfo(" - Files with only recognized lines:", green(stats.filesWithoutChanges))
-			logInfo(" - Other files                     :", stats.totalFiles-stats.filesWithChanges-stats.filesWithoutChanges, "(non-executable or custom code)")
+			logInfo(" - Files with custom code          :", stats.filesCustomCode)
+			logInfo(" - Files without code              :", stats.filesNoCode)
 		}
 	}
 	logInfo()

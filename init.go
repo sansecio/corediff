@@ -17,6 +17,8 @@ type (
 		totalFiles          int
 		filesWithChanges    int
 		filesWithoutChanges int
+		filesNoCode         int
+		filesCustomCode     int
 	}
 
 	baseArgs struct {
@@ -59,11 +61,12 @@ var (
 		"/app/etc/env.php",
 		"/wp-config.php",
 		"/lib/internal/Magento",
+		"/app/design/frontend/Magento",
 	}
 
 	highlightPatterns = []string{
 		`\$_[A-Z]`,
-		`["']\s*\.\s*['"]`,
+		`\S["']\s*\.\s*['"]\S`,
 		`die\(`,
 		`base64_`,
 		`@(unlink|include|mysql)`,
@@ -72,6 +75,16 @@ var (
 		`fopen`,
 		`file_put_contents`,
 		`file_get_contents`,
+		`@[a-z_]+\(`,
+	}
+
+	// They vary often, so add these to core paths when adding signatures
+	// However, do process their contents, so files can be inspected with
+	// corediff --ignore-paths
+	excludePaths = []string{
+		"vendor/composer/**",
+		"generated/**",
+		"var/**",
 	}
 )
 
@@ -104,15 +117,15 @@ func setup() *baseArgs {
 	}
 
 	for i, path := range args.Path.Path {
-		path, err = filepath.Abs(path)
-		check(err)
-		path, err = filepath.EvalSymlinks(path)
-		check(err)
-
 		if !pathExists(path) {
 			fmt.Println("Path", path, "does not exist?")
 			os.Exit(1)
 		}
+
+		path, err = filepath.Abs(path)
+		check(err)
+		path, err = filepath.EvalSymlinks(path)
+		check(err)
 
 		if !args.Merge && !args.IgnorePaths && !isCmsRoot(path) {
 			fmt.Println("!!!", path)

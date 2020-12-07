@@ -49,6 +49,12 @@ go run . <magento_path>
 
 At the first run, `corediff` will automatically download the Sansec hash database (~26MB).
 
+# Community contributed datasets
+
+[@fros_it](https://twitter.com/fros_it) has kindly contributed hashes for his collection of Magento Connect extensions, including all available historical copies. Download the [extension hash database](https://sansec.io/ext/files/m1ext.db) here (62MB) and use it like this:
+
+![](https://buq.eu/screenshots/RXdQ1Mmg5KliivMtK6DlHTcP.png)
+
 # Contributing
 
 Adding or maintaining hashes?
@@ -68,6 +74,6 @@ Contributions welcome! Naturally, we only accept hashes from trusted sources. [C
 
 # About Sansec
 
-Sansec's flagship software [eComscan](https://sansec.io) is used by ecommerce agencies, law enforcement and PCI forensic investigators. We are proud to open source many of our internal tools and hope that it will benefit our partners and customers. Malware contributions welcome.
+Sansec's flagship software [eComscan](https://sansec.io/?corediff) is used by ecommerce agencies, law enforcement and PCI forensic investigators. We are proud to open source many of our internal tools and hope that it will benefit our partners and customers. Malware contributions welcome.
 
-(C) 2020 Sansec BV https://sansec.io // info@sansec.io
+(C) 2020 [Sansec BV](https://sansec.io/?corediff) // info@sansec.io

@@ -4,11 +4,13 @@ set -e
 
 function import {
 
-    echo "Importing $1 .."
-    src=./$1
+    name="$1"
+    url="$2"
+    echo "Importing $name .."
+    src=./$name
 
     if [[ ! -d $src ]]; then
-        git clone --quiet $2 $src
+        git clone --quiet $url $src
     else
         ( cd $src && git clean -f -d && git fetch --quiet --tags )
     fi
@@ -17,9 +19,12 @@ function import {
     for v in $tags; do
         echo $PWD $v
         ( cd $src && git clean -f -d && git checkout --quiet $v )
-        ./corediff.py add $src
+        # ensure that it looks like a proper magento root
+        # touch $src/wp-config.php
+        corediff --database=$name.db --add $src
     done
 }
 
-import magento1 https://github.com/OpenMage/magento-mirror.git
+
+#import magento1 https://github.com/OpenMage/magento-mirror.git
 import magento2 https://github.com/magento/magento2.git

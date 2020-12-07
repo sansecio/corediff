@@ -37,6 +37,13 @@ func Test_hash(t *testing.T) {
 	}
 }
 
+func Test_vendor_bug(t *testing.T) {
+	db := loadDB("m233.db")
+	h := [16]byte{145, 49, 107, 134, 191, 186, 29, 135, 27, 49, 110, 122, 36, 242, 133, 65}
+	fmt.Println("hash is", h)
+	fmt.Println("hash in db:", db[h])
+
+}
 func Test_Corruption(t *testing.T) {
 	fh, _ := os.Open("fixture/sample")
 	defer fh.Close()

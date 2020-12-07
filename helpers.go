@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/gobwas/glob"
 )
 
 func isCmsRoot(root string) bool {
@@ -82,4 +84,15 @@ func hash(b []byte) [16]byte {
 
 func pathHash(p string) [16]byte {
 	return hash([]byte("path:" + p))
+}
+
+func pathIsExcluded(p string) bool {
+	// Does p match any of excludePaths ?
+	for _, xx := range excludePaths {
+		// TODO: optim with precompile
+		if glob.MustCompile(xx).Match(p) {
+			return true
+		}
+	}
+	return false
 }
