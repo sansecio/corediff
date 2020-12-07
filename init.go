@@ -29,6 +29,7 @@ type (
 		Add         bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
 		Merge       bool   `short:"m" long:"merge" description:"Merge databases"`
 		IgnorePaths bool   `short:"i" long:"ignore-paths" description:"Scan everything, not just core paths."`
+		NoCMS       bool   `long:"no-cms" description:"Don't check for CMS root when adding hashes. Do add file paths."`
 		Verbose     bool   `short:"v" long:"verbose" description:"Show what is going on"`
 	}
 )
@@ -127,7 +128,7 @@ func setup() *baseArgs {
 		path, err = filepath.EvalSymlinks(path)
 		check(err)
 
-		if !args.Merge && !args.IgnorePaths && !isCmsRoot(path) {
+		if !args.Merge && !args.IgnorePaths && !args.NoCMS && !isCmsRoot(path) {
 			fmt.Println("!!!", path)
 			fmt.Println("Path does not seem to be an application root path, so we cannot check official root paths.")
 			fmt.Println("Try again with proper root path, or do a full scan with --ignore-paths")
