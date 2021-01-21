@@ -70,13 +70,16 @@ var (
 		`\S["']\s*\.\s*['"]\S`,
 		`die\(`,
 		`base64_`,
-		`@(unlink|include|mysql)`,
+		// `@(unlink|include|mysql)`, already more generic one below
 		`../../..`,
 		`hex2bin`,
 		`fopen`,
+		`exec\(`,
+		// `curl_exec,
 		`file_put_contents`,
 		`file_get_contents`,
 		`@[a-z_]+\(`,
+		`\$.\(\$.\(`,
 	}
 
 	// They vary often, so add these to core paths when adding signatures
