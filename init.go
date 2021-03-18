@@ -35,7 +35,8 @@ type (
 )
 
 const (
-	hashDBURL = "https://sansec.io/ext/files/corediff.bin"
+	hashDBURL    = "https://sansec.io/ext/files/corediff.bin"
+	maxTokenSize = 1024 * 1024 * 10 // 10 MB
 )
 
 var (
@@ -48,6 +49,8 @@ var (
 	logLevel = 1
 
 	globalDB hashDB
+
+	buf = make([]byte, 0, maxTokenSize)
 
 	scanExts  = []string{"php", "phtml", "js", "htaccess", "sh"}
 	skipLines = [][]byte{

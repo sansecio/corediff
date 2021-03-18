@@ -51,9 +51,8 @@ func parseFile(path, relPath string, db hashDB, updateDB bool) (hits []int, line
 	check(err)
 	defer fh.Close()
 
-	maxTokenSize := 1024 * 1024 * 10 // 10MB
 	scanner := bufio.NewScanner(fh)
-	buf := make([]byte, 0, maxTokenSize)
+	buf = buf[:0]
 	scanner.Buffer(buf, maxTokenSize)
 	for i := 0; scanner.Scan(); i++ {
 		x := scanner.Bytes()
