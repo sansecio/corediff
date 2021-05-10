@@ -36,5 +36,5 @@ chronic rsync corediff.bin willem.h:sansec/ext/files/corediff.bin
 echo
 echo 'Finished! Run:'
 echo
-echo '	curl https://mageintel.com/ecomscan/corediff -O && chmod 755 corediff'
+echo ' curl https://api.sansec.io/downloads/corediff -O && chmod 755 corediff'
 echo
