@@ -37,7 +37,7 @@ Alternatively you can scan all files with the `--ignore-paths` option. NB this w
 
 Use our binary package:
 ```sh
-curl https://mageintel.com/ecomscan/corediff -O
+curl https://api.sansec.io/downloads/corediff -O
 chmod 755 corediff
 ./corediff <magento_path> | less -SR
 ```
