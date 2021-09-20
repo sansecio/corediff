@@ -120,7 +120,7 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
 
-				} else {
+				} else if !args.Suspect {
 					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
 				}
