@@ -36,7 +36,7 @@ type (
 )
 
 const (
-	hashDBURL    = "https://sansec.io/ext/files/corediff.bin"
+	hashDBURL    = "https://api.sansec.io/downloads/corediff.bin"
 	maxTokenSize = 1024 * 1024 * 10 // 10 MB
 )
 
