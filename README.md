@@ -52,7 +52,7 @@ At the first run, `corediff` will automatically download the Sansec hash databas
 
 # Community contributed datasets
 
-[@fros_it](https://twitter.com/fros_it) has kindly contributed hashes for his collection of Magento Connect extensions, including all available historical copies. Download the [extension hash database](https://sansec.io/ext/files/m1ext.db) here (62MB) and use it like this:
+[@fros_it](https://twitter.com/fros_it) has kindly contributed hashes for his collection of Magento Connect extensions, including all available historical copies. Download the [extension hash database](https://api.sansec.io/downloads/corediff-db/m1ext.db) here (62MB) and use it like this:
 
 ![](https://buq.eu/screenshots/RXdQ1Mmg5KliivMtK6DlHTcP.png)
 
