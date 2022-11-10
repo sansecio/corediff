@@ -184,7 +184,7 @@ func main() {
 	args := setup()
 	db := loadDB(args.Database)
 
-	logInfo(boldwhite("\nMagento Corediff loaded ", len(db), " precomputed hashes. (C) 2020-2021 info@sansec.io"))
+	logInfo(boldwhite("\nMagento Corediff loaded ", len(db), " precomputed hashes. (C) 2020-2022 labs@sansec.io"))
 	logInfo("Using database:", args.Database, "\n")
 
 	if args.Merge {

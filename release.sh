@@ -1,7 +1,6 @@
 #!/bin/bash
 
-set -e 
-
+set -e
 
 function chronic {
     set +e
@@ -13,23 +12,22 @@ function chronic {
         echo ">>>> Program $* failure:"
         echo ">>>> $ret"
         exit
-    fi    
+    fi
     echo -n $'\r'
     echo -e " \e[1;32m✔\e[0m $*"
     set -e
 }
 
-
-chronic go build -o ~/bin/corediff 
-chronic upx -qq ~/bin/corediff 
+chronic go build -o ~/bin/corediff
+chronic upx -qq ~/bin/corediff
 chronic rsync ~/bin/corediff ssweb:/data/ecomscan/downloads
 
 >corediff.bin
 chronic corediff -d corediff.bin -m \
-        db/m1ce.db \
-        db/m1ee.db \
-        db/m2ce-241.db \
-        db/m2ee-232.db
+    db/m1ce.db \
+    db/m1ee.db \
+    db/m2ce*.db \
+    db/m2ee*.db
 
 chronic rsync corediff.bin ssweb:/data/ecomscan/downloads/corediff.bin
 

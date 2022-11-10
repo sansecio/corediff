@@ -1,4 +1,5 @@
 # Magento Corediff
+
 ![](https://buq.eu/screenshots/6595XfnX5wwUPzbFQGkU0GgN.png)
 
 A forensic tool to quickly find unauthorized modifications in a Magento 1 or 2 code base. Corediff compares each line of code with a database of 1.7M legitimate code hashes and shows you the lines that have not been seen before. A bit like [@NYT_first_said](https://maxbittker.github.io/clear-pipes/).
@@ -7,10 +8,9 @@ A forensic tool to quickly find unauthorized modifications in a Magento 1 or 2 c
 
 > _"Very useful to gauge foreign codebases"_
 
-Corediff was created by [Sansec](https://sansec.io/?corediff), specialists in Magento security and digital forensics since 2010. Corediff analysis helped us to uncover numerous cases of server side payment skimming that would otherwise have gone undetected. 
+Corediff was created by [Sansec](https://sansec.io/?corediff), specialists in Magento security and digital forensics since 2010. Corediff analysis helped us to uncover numerous cases of server side payment skimming that would otherwise have gone undetected.
 
 # Usage
-
 
 ```
 Usage:
@@ -29,19 +29,22 @@ In the following example, Corediff reports a malicious backdoor in `cron.php`:
 
 ![](https://buq.eu/screenshots/y76R3uN9CrCFN6GEji4uSPtM.png)
 
-In default mode, Corediff will only check official Magento paths. In order to find these, you should point Corediff to the root of a Magento installation. 
+In default mode, Corediff will only check official Magento paths. In order to find these, you should point Corediff to the root of a Magento installation.
 
 Alternatively you can scan all files with the `--ignore-paths` option. NB this will produce more output and requires more interpretation by a developer or forensic analyst.
 
 # Installation
 
 Use our binary package:
+
 ```sh
 curl https://api.sansec.io/downloads/corediff -O
 chmod 755 corediff
 ./corediff <magento_path> | less -SR
 ```
+
 Or compile from source (requires Go 1.13+):
+
 ```sh
 git clone https://github.com/sansecio/magento-corediff.git
 cd magento-corediff
@@ -60,7 +63,6 @@ At the first run, `corediff` will automatically download the Sansec hash databas
 
 Adding or maintaining hashes?
 
-
 ```bash
 # Create or update custom.db with all hashes from `<path>`.
 corediff --database=custom.db --add <path>
@@ -77,4 +79,4 @@ Contributions welcome! Naturally, we only accept hashes from trusted sources. [C
 
 Sansec's flagship software [eComscan](https://sansec.io/?corediff) is used by ecommerce agencies, law enforcement and PCI forensic investigators. We are proud to open source many of our internal tools and hope that it will benefit our partners and customers. Malware contributions welcome.
 
-(C) 2020 [Sansec BV](https://sansec.io/?corediff) // info@sansec.io
+(C) 2022 [Sansec BV](https://sansec.io/?corediff) // info@sansec.io
