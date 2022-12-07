@@ -14,16 +14,20 @@ function chronic {
         exit
     fi
     echo -n $'\r'
-    echo -e " \e[1;32m✔\e[0m $*"
+    printf " \e[1;32m✔\e[0m $\n*"
     set -e
 }
 
 # if different arch
 chronic go build -o ~/bin/corediff
 
-chronic GOARCH=amd64 GOOS=linux go build -o /tmp/corediff
+(
+	GOARC=amd64
+	GOOS=linux
+	chronic go build -o /tmp/corediff
+	chronic rsync /tmp/corediff ssweb:/data/ecomscan/downloads
+)
 #chronic upx -qq ~/bin/corediff
-chronic rsync /tmp/corediff ssweb:/data/ecomscan/downloads
 
 >corediff.bin
 chronic corediff -d corediff.bin -m \
