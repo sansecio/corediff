@@ -82,6 +82,7 @@ var (
 		`file_get_contents`,
 		`@[a-z_]+\(`,
 		`\$.\(\$.\(`,
+		`call_user_func_array`,
 	}
 
 	// They vary often, so add these to core paths when adding signatures
