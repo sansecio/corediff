@@ -18,9 +18,12 @@ function chronic {
     set -e
 }
 
+# if different arch
 chronic go build -o ~/bin/corediff
-chronic upx -qq ~/bin/corediff
-chronic rsync ~/bin/corediff ssweb:/data/ecomscan/downloads
+
+chronic GOARCH=amd64 GOOS=linux go build -o /tmp/corediff
+#chronic upx -qq ~/bin/corediff
+chronic rsync /tmp/corediff ssweb:/data/ecomscan/downloads
 
 >corediff.bin
 chronic corediff -d corediff.bin -m \
