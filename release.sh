@@ -22,8 +22,8 @@ function chronic {
 chronic go build -o ~/bin/corediff
 
 (
-	GOARC=amd64
-	GOOS=linux
+	export GOARCH=amd64
+	export GOOS=linux
 	chronic go build -o /tmp/corediff
 	chronic rsync /tmp/corediff ssweb:/data/ecomscan/downloads
 )
