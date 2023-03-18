@@ -14,7 +14,7 @@ Corediff was created by [Sansec](https://sansec.io/?corediff), specialists in Ma
 
 ```
 Usage:
-  magento-corediff [OPTIONS] <path>...
+  corediff [OPTIONS] <path>...
 
 Application Options:
   -d, --database=     Hash database path (default: download Sansec database)
@@ -35,10 +35,11 @@ Alternatively you can scan all files with the `--ignore-paths` option. NB this w
 
 # Installation
 
-Use our binary package:
+Use our binary package (available for Linux & Mac, arm64 & amd64)
 
 ```sh
-curl https://api.sansec.io/downloads/corediff -O
+osarch=$(uname -sm | tr 'LD ' 'ld-')
+curl https://sansec.io/downloads/$osarch/corediff -O
 chmod 755 corediff
 ./corediff <magento_path> | less -SR
 ```

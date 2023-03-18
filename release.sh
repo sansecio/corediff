@@ -18,16 +18,17 @@ function chronic {
     set -e
 }
 
-# if different arch
-chronic go build -o ~/bin/corediff
+targets="linux,amd64 linux,arm64 darwin,arm64 darwin,amd64" # linux,arm64
+for x in $targets; do
+    os=$(echo $x | cut -d, -f1)
+    arch=$(echo $x | cut -d, -f2)
 
-(
-	export GOARCH=amd64
-	export GOOS=linux
-	chronic go build -o /tmp/corediff
-	chronic rsync /tmp/corediff ssweb:/data/ecomscan/downloads
-)
-#chronic upx -qq ~/bin/corediff
+    fn="corediff-$os-$arch"
+    echo Building $fn
+    chronic env GOOS=$os GOARCH=$arch go build -o build/$fn &&
+    chronic rsync  build/$fn ssweb:/data/downloads/$os-$arch/corediff
+done
+
 
 >corediff.bin
 chronic corediff -d corediff.bin -m \
@@ -41,5 +42,5 @@ chronic rsync corediff.bin ssweb:/data/ecomscan/downloads/corediff.bin
 echo
 echo 'Finished! Run:'
 echo
-echo '  curl https://api.sansec.io/downloads/corediff -O && chmod 755 corediff'
+echo "  curl https://sansec.io/downloads/$(uname -sm | tr 'LD ' 'ld-')/corediff -O && chmod 755 corediff"
 echo
