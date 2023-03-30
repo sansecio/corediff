@@ -2,46 +2,48 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 )
 
+var placeholder = struct{}{}
+
 func loadDB(path string) hashDB {
-
 	m := make(hashDB)
-
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return m
+	} else if err != nil {
+		log.Fatal(err)
 	}
-	check(err)
 	defer f.Close()
 	reader := bufio.NewReader(f)
 	for {
-		b := make([]byte, 16)
-		n, err := reader.Read(b)
-		if n == 0 {
+		var b uint32
+		err = binary.Read(reader, binary.LittleEndian, &b)
+		if err == io.EOF {
 			break
+		} else if err != nil {
+			log.Fatal(err)
 		}
-		check(err)
-		var b2 [16]byte
-		copy(b2[:], b) // need to convert to array first
-		m[b2] = true
+		m[b] = placeholder
 	}
 	return m
 }
 
 func saveDB(path string, db hashDB) {
 	f, err := os.Create(path)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer f.Close()
-	check(err)
 	for k := range db {
-		n, err := f.Write(k[:])
-		check(err)
-		if n != 16 {
-			log.Fatal("Wrote unexpected number of bytes?")
+		if err := binary.Write(f, binary.LittleEndian, k); err != nil {
+			log.Fatal(err)
 		}
 	}
 }
@@ -60,10 +62,10 @@ func parseFile(path, relPath string, db hashDB, updateDB bool) (hits []int, line
 		copy(l, x)
 		lines = append(lines, l)
 		h := hash(normalizeLine(l))
-		if !db[h] {
+		if _, ok := db[h]; !ok {
 			hits = append(hits, i)
 			if updateDB {
-				db[h] = true
+				db[h] = placeholder
 			}
 		}
 	}
@@ -103,7 +105,7 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 
 		// Only do path checking for non-root elts
 		if path != root && !args.IgnorePaths {
-			if !db[pathHash(relPath)] {
+			if _, ok := db[pathHash(relPath)]; !ok {
 				stats.filesCustomCode++
 				logVerbose(grey(" ? ", relPath))
 				return nil
@@ -163,7 +165,7 @@ func addPath(root string, db hashDB, args *baseArgs) {
 		// If relPath has valid ext, add hash of "path:<relPath>" to db
 		// Never add root path (possibly file)
 		if !args.IgnorePaths && path != root && !pathIsExcluded(relPath) {
-			db[pathHash(relPath)] = true
+			db[pathHash(relPath)] = placeholder
 		}
 
 		hits, _ := parseFile(path, relPath, db, true)
@@ -184,7 +186,7 @@ func main() {
 	args := setup()
 	db := loadDB(args.Database)
 
-	logInfo(boldwhite("\nMagento Corediff loaded ", len(db), " precomputed hashes. (C) 2020-2022 labs@sansec.io"))
+	logInfo(boldwhite("Corediff loaded ", len(db), " precomputed hashes. (C) 2020-2023 labs@sansec.io"))
 	logInfo("Using database:", args.Database, "\n")
 
 	if args.Merge {
@@ -192,7 +194,7 @@ func main() {
 			db2 := loadDB(p)
 			logInfo("Merging", filepath.Base(p), "with", len(db2), "entries ..")
 			for k := range db2 {
-				db[k] = true
+				db[k] = placeholder
 			}
 		}
 		logInfo("Saving", args.Database, "with a total of", len(db), "entries.")
@@ -221,5 +223,4 @@ func main() {
 			logInfo(" - Files without code              :", stats.filesNoCode)
 		}
 	}
-	logInfo()
 }

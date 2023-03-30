@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5"
 	"fmt"
+	"hash/crc32"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -78,11 +78,11 @@ func check(err error) {
 	}
 }
 
-func hash(b []byte) [16]byte {
-	return md5.Sum(b)
+func hash(b []byte) uint32 {
+	return crc32.ChecksumIEEE(b)
 }
 
-func pathHash(p string) [16]byte {
+func pathHash(p string) uint32 {
 	return hash([]byte("path:" + p))
 }
 

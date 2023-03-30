@@ -11,7 +11,7 @@ import (
 )
 
 type (
-	hashDB map[[16]byte]bool
+	hashDB map[uint32]struct{}
 
 	walkStats struct {
 		totalFiles          int
@@ -36,7 +36,7 @@ type (
 )
 
 const (
-	hashDBURL    = "https://api.sansec.io/downloads/corediff.bin"
+	hashDBURL    = "https://sansec.io/downloads/corediff-db/corediff.bin"
 	maxTokenSize = 1024 * 1024 * 10 // 10 MB
 )
 
@@ -89,7 +89,7 @@ var (
 	// However, do process their contents, so files can be inspected with
 	// corediff --ignore-paths
 	excludePaths = []string{
-		"vendor/composer/**",
+		// "vendor/composer/**",
 		"generated/**",
 		"var/**",
 	}
@@ -120,6 +120,7 @@ func setup() *baseArgs {
 			fmt.Println("Can't merge without given --database file")
 			os.Exit(1)
 		}
+		fmt.Println("Downloading default hash database from", hashDBURL)
 		args.Database = urlfilecache.ToPath(hashDBURL)
 	}
 
