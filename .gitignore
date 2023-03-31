@@ -1,3 +1,5 @@
+!.composer/config.json
+.composer/*
 .vscode
 *.bin
 /db

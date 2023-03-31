@@ -90,6 +90,7 @@ var (
 	// corediff --ignore-paths
 	excludePaths = []string{
 		// "vendor/composer/**",
+		"vendor/composer/autoload_*.php",
 		"generated/**",
 		"var/**",
 	}
