@@ -1,0 +1,11 @@
+{
+    "config": {
+        "allow-plugins": true
+    },
+    "repositories": {
+        "0": {
+            "type": "composer",
+            "url": "https://repo.magento.com/"
+        }
+    }
+}

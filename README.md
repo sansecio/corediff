@@ -2,7 +2,7 @@
 
 ![](https://buq.eu/screenshots/6595XfnX5wwUPzbFQGkU0GgN.png)
 
-A forensic tool to quickly find unauthorized modifications in a Magento 1 or 2 code base. Corediff compares each line of code with a database of 1.7M legitimate code hashes and shows you the lines that have not been seen before. A bit like [@NYT_first_said](https://maxbittker.github.io/clear-pipes/).
+A forensic tool to quickly find unauthorized modifications in an open source code base, such as Magento. Corediff compares each line of code with a database of 1.7M legitimate code hashes and shows you the lines that have not been seen before. A bit like [@NYT_first_said](https://maxbittker.github.io/clear-pipes/).
 
 > _"Corediff saved us countless hours"_
 
@@ -41,24 +41,28 @@ Use our binary package (available for Linux & Mac, arm64 & amd64)
 osarch=$(uname -sm | tr 'LD ' 'ld-')
 curl https://sansec.io/downloads/$osarch/corediff -O
 chmod 755 corediff
-./corediff <magento_path> | less -SR
+./corediff <store-path> | less -SR
 ```
 
-Or compile from source (requires Go 1.13+):
+Or compile from source (requires recent Go version):
 
 ```sh
-git clone https://github.com/sansecio/magento-corediff.git
-cd magento-corediff
-go run . <magento_path>
+git clone https://github.com/sansecio/corediff.git
+cd corediff
+go run . <store-path>
 ```
 
-At the first run, `corediff` will automatically download the Sansec hash database (~26MB).
+At the first run, `corediff` will automatically download the Sansec hash database.
 
 # Community contributed datasets
 
-[@fros_it](https://twitter.com/fros_it) has kindly contributed hashes for his collection of Magento Connect extensions, including all available historical copies. Download the [extension hash database](https://api.sansec.io/downloads/corediff-db/m1ext.db) here (62MB) and use it like this:
+[@fros_it](https://twitter.com/fros_it) has kindly contributed hashes for his collection of Magento Connect extensions, including all available historical copies. Download the [extension hash database](https://sansec.io/downloads/corediff-db/m1ext.db) here (62MB) and use it like this:
 
 ![](https://buq.eu/screenshots/RXdQ1Mmg5KliivMtK6DlHTcP.png)
+
+# Todo
+
+- [ ] Compression of hash db? Eg https://github.com/Smerity/govarint, https://github.com/bits-and-blooms/bloom
 
 # Contributing
 
@@ -80,4 +84,4 @@ Contributions welcome! Naturally, we only accept hashes from trusted sources. [C
 
 Sansec's flagship software [eComscan](https://sansec.io/?corediff) is used by ecommerce agencies, law enforcement and PCI forensic investigators. We are proud to open source many of our internal tools and hope that it will benefit our partners and customers. Malware contributions welcome.
 
-(C) 2022 [Sansec BV](https://sansec.io/?corediff) // info@sansec.io
+(C) 2023 [Sansec BV](https://sansec.io/?corediff) // info@sansec.io

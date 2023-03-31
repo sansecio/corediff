@@ -5,17 +5,22 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func digest(b [16]byte) string {
+func digest(b uint32) string {
 	return fmt.Sprintf("%x", b)
 }
 
 func Test_parseFile(t *testing.T) {
-	hits, lines := parseFile("fixture/odd-encoding.js", "n/a", hashDB{}, false)
-	fmt.Println("succeeded", len(hits), len(lines))
+	hdb := hashDB{}
+	updateDB := true
+	hits, lines := parseFile("fixture/docroot/odd-encoding.js", "n/a", hdb, updateDB)
+	assert.Equal(t, 220, len(hdb))
+	assert.Equal(t, 220, len(hits))
+	assert.Equal(t, 471, len(lines))
 }
 
 func Test_hash(t *testing.T) {
@@ -23,14 +28,11 @@ func Test_hash(t *testing.T) {
 		args []byte
 		want string
 	}{
-		{
-			[]byte("banaan"),
-			"31d674be46e1ba6b54388a671c09accb",
-		},
+		{[]byte("banaan"), "14ac6691"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.args), func(t *testing.T) {
-			if got := digest(hash(tt.args)); !reflect.DeepEqual(got, tt.want) {
+			if got := digest(hash(tt.args)); got != tt.want {
 				t.Errorf("hash() = %x (%v), want %x", got, got, tt.want)
 			}
 		})
@@ -38,14 +40,15 @@ func Test_hash(t *testing.T) {
 }
 
 func Test_vendor_bug(t *testing.T) {
-	db := loadDB("m233.db")
-	h := [16]byte{145, 49, 107, 134, 191, 186, 29, 135, 27, 49, 110, 122, 36, 242, 133, 65}
-	fmt.Println("hash is", h)
-	fmt.Println("hash in db:", db[h])
-
+	db := loadDB("fixture/sample.db")
+	assert.Len(t, db, 238)
+	wantHash := uint32(3333369281)
+	if _, ok := db[wantHash]; !ok {
+		t.Error("hash not in db")
+	}
 }
 func Test_Corruption(t *testing.T) {
-	fh, _ := os.Open("fixture/sample")
+	fh, _ := os.Open("fixture/docroot/sample")
 	defer fh.Close()
 
 	lines := [][]byte{}
@@ -54,33 +57,11 @@ func Test_Corruption(t *testing.T) {
 	for scanner.Scan() {
 		x := scanner.Bytes()
 		l := make([]byte, len(x))
-		// Need to copy, underlying Scan array may change later
 		copy(l, x)
-		fmt.Printf("%s\n", l)
 		lines = append(lines, l)
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Scanning completed, lines:", len(lines))
-
-	for _, l := range lines {
-		fmt.Printf("%s\n", l)
-	}
-}
-
-func Test_NoFileSource(t *testing.T) {
-	lines := [][]byte{}
-
-	for i := 0; i < 70; i++ {
-		line := fmt.Sprintf("LINE %3d =======================================================", i)
-		lines = append(lines, []byte(line))
-	}
-
-	fmt.Println("Scanning completed, lines:", len(lines))
-
-	for _, l := range lines {
-		fmt.Printf("%s\n", l)
-	}
 }
