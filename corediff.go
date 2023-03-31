@@ -105,7 +105,11 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 
 		// Only do path checking for non-root elts
 		if path != root && !args.IgnorePaths {
-			if _, ok := db[pathHash(relPath)]; !ok {
+
+			_, foundInDb := db[pathHash(relPath)]
+			shouldExclude := pathIsExcluded(relPath)
+
+			if !foundInDb || shouldExclude {
 				stats.filesCustomCode++
 				logVerbose(grey(" ? ", relPath))
 				return nil
