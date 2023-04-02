@@ -44,9 +44,6 @@ func Test_vendor_bug(t *testing.T) {
 	assert.Len(t, db, 238)
 	wantHash := uint64(3900178074848893275)
 	if _, ok := db[wantHash]; !ok {
-		for k, _ := range db {
-			fmt.Println(k)
-		}
 		t.Error("hash not in db")
 	}
 }
