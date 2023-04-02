@@ -10,12 +10,14 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/gwillem/go-buildversion"
 	"github.com/gwillem/go-selfupdate"
 )
 
 var (
-	selfUpdateURL = fmt.Sprintf("https://sansec.io/downloads/%s-%s/corediff", runtime.GOOS, runtime.GOARCH)
-	placeholder   = struct{}{}
+	selfUpdateURL   = fmt.Sprintf("https://sansec.io/downloads/%s-%s/corediff", runtime.GOOS, runtime.GOARCH)
+	placeholder     = struct{}{}
+	corediffVersion = buildversion.String()
 )
 
 func loadDB(path string) hashDB {
@@ -200,7 +202,7 @@ func main() {
 	args := setup()
 	db := loadDB(args.Database)
 
-	logInfo(boldwhite("Corediff loaded ", len(db), " precomputed hashes. (C) 2020-2023 labs@sansec.io"))
+	logInfo(boldwhite("Corediff ", corediffVersion, " loaded ", len(db), " precomputed hashes. (C) 2020-2023 labs@sansec.io"))
 	logInfo("Using database:", args.Database, "\n")
 
 	if args.Merge {
