@@ -8,9 +8,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
+
+	"github.com/gwillem/go-selfupdate"
 )
 
-var placeholder = struct{}{}
+var (
+	selfUpdateURL = fmt.Sprintf("https://sansec.io/downloads/%s-%s/corediff", runtime.GOOS, runtime.GOARCH)
+	placeholder   = struct{}{}
+)
 
 func loadDB(path string) hashDB {
 	m := make(hashDB)
@@ -186,6 +192,10 @@ func addPath(root string, db hashDB, args *baseArgs) {
 }
 
 func main() {
+
+	if restarted, err := selfupdate.UpdateRestart(selfUpdateURL); restarted || err != nil {
+		logVerbose("Restarted new version", restarted, "with error:", err)
+	}
 
 	args := setup()
 	db := loadDB(args.Database)
