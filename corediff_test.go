@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func digest(b uint32) string {
+func digest(b uint64) string {
 	return fmt.Sprintf("%x", b)
 }
 
@@ -28,7 +28,7 @@ func Test_hash(t *testing.T) {
 		args []byte
 		want string
 	}{
-		{[]byte("banaan"), "14ac6691"},
+		{[]byte("banaan"), "acfb1ff4438e39f3"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.args), func(t *testing.T) {
@@ -42,8 +42,11 @@ func Test_hash(t *testing.T) {
 func Test_vendor_bug(t *testing.T) {
 	db := loadDB("fixture/sample.db")
 	assert.Len(t, db, 238)
-	wantHash := uint32(3333369281)
+	wantHash := uint64(3900178074848893275)
 	if _, ok := db[wantHash]; !ok {
+		for k, _ := range db {
+			fmt.Println(k)
+		}
 		t.Error("hash not in db")
 	}
 }

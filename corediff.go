@@ -31,7 +31,7 @@ func loadDB(path string) hashDB {
 	defer f.Close()
 	reader := bufio.NewReader(f)
 	for {
-		var b uint32
+		var b uint64
 		err = binary.Read(reader, binary.LittleEndian, &b)
 		if err == io.EOF {
 			break

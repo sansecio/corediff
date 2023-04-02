@@ -11,7 +11,7 @@ import (
 )
 
 type (
-	hashDB map[uint32]struct{}
+	hashDB map[uint64]struct{}
 
 	walkStats struct {
 		totalFiles          int

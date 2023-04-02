@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"hash/crc32"
 	"testing"
 )
 
@@ -17,8 +16,13 @@ func Test_Needle(t *testing.T) {
 	db := loadDB(dbpath)
 	fmt.Println("Loaded entries:", len(db))
 
+	for k, _ := range db {
+		fmt.Println("first entry", k)
+		break
+	}
+
 	for _, needle := range needles {
-		checksum := crc32.ChecksumIEEE([]byte(needle))
+		checksum := hash([]byte(needle))
 		hash := fmt.Sprintf("%x", checksum)
 		_, ok := db[checksum]
 		fmt.Println(ok, hash)

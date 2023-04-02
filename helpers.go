@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"hash/crc32"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/gobwas/glob"
 )
 
@@ -78,11 +78,11 @@ func check(err error) {
 	}
 }
 
-func hash(b []byte) uint32 {
-	return crc32.ChecksumIEEE(b)
+func hash(b []byte) uint64 {
+	return xxhash.Sum64(b)
 }
 
-func pathHash(p string) uint32 {
+func pathHash(p string) uint64 {
 	return hash([]byte("path:" + p))
 }
 
