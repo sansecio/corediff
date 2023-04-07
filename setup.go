@@ -11,7 +11,7 @@ import (
 )
 
 type (
-	hashDB map[uint32]struct{}
+	hashDB map[uint64]struct{}
 
 	walkStats struct {
 		totalFiles          int
@@ -121,7 +121,7 @@ func setup() *baseArgs {
 			fmt.Println("Can't merge without given --database file")
 			os.Exit(1)
 		}
-		fmt.Println("Downloading default hash database from", hashDBURL)
+		// fmt.Println("Using default hash database from", hashDBURL)
 		args.Database = urlfilecache.ToPath(hashDBURL)
 	}
 
