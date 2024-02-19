@@ -44,6 +44,7 @@ var (
 	boldred   = color.New(color.FgHiRed, color.Bold).SprintFunc()
 	grey      = color.New(color.FgHiBlack).SprintFunc()
 	boldwhite = color.New(color.FgHiWhite).SprintFunc()
+	warn      = color.New(color.FgYellow, color.Bold).SprintFunc()
 	alarm     = color.New(color.FgHiWhite, color.BgHiRed, color.Bold).SprintFunc()
 	green     = color.New(color.FgGreen).SprintFunc()
 
@@ -97,7 +98,6 @@ var (
 )
 
 func setup() *baseArgs {
-
 	var err error
 	color.NoColor = false
 

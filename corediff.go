@@ -58,6 +58,10 @@ func saveDB(path string, db hashDB) {
 
 func parseFile(path, relPath string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
 	fh, err := os.Open(path)
+	if os.IsNotExist(err) {
+		logInfo(warn("file does not exist: " + path))
+		return nil, nil
+	}
 	check(err)
 	defer fh.Close()
 
@@ -133,7 +137,6 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 				if shouldHighlight(lines[idx]) {
 					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
-
 				} else if !args.Suspect {
 					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
@@ -190,11 +193,9 @@ func addPath(root string, db hashDB, args *baseArgs) {
 		return nil
 	})
 	check(err)
-
 }
 
 func main() {
-
 	if restarted, err := selfupdate.UpdateRestart(selfUpdateURL); restarted || err != nil {
 		logVerbose("Restarted new version", restarted, "with error:", err)
 	}
