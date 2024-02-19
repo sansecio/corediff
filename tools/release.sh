@@ -8,7 +8,7 @@ tools/buildall.sh
     cd build
     for x in */corediff; do
         echo "Uploading $x"
-        rsync -a $x ssweb:/data/downloads/$x;
+        rsync -a $x sansec-web:/data/downloads/$x;
     done
 )
 
