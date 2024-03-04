@@ -3,7 +3,7 @@ package main
 import "regexp"
 
 var highlightPatternsRe = compileRegexps([]string{
-	`(fopen|hex2bin|die|exec|chr|hexdec)\(`,
+	`(fopen|hex2bin|die|exec|chr|hexdec|eval)\(`,
 	`\$_[A-Z]`,
 	`GLOBALS`,
 	`\S"\s*\.\s*"\S`, // " . "
