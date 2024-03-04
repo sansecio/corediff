@@ -32,6 +32,7 @@ type (
 		SuspectOnly bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
 		NoCMS       bool   `long:"no-cms" description:"Don't check for CMS root when adding hashes. Do add file paths."`
 		Verbose     bool   `short:"v" long:"verbose" description:"Show what is going on"`
+		PathFilter  string `short:"f" long:"path-filter" description:"Applies a path filter prior to diffing (e.g. vendor/magento)"`
 	}
 )
 

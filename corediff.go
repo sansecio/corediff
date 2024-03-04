@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/gwillem/go-buildversion"
 	"github.com/gwillem/go-selfupdate"
@@ -104,6 +105,9 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 			return nil
 		}
 		if info.IsDir() {
+			return nil
+		}
+		if args.PathFilter != "" && !strings.HasPrefix(relPath, args.PathFilter) {
 			return nil
 		}
 
