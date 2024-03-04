@@ -111,7 +111,6 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 
 		if !hasValidExt(path) {
 			stats.filesNoCode++
-			// logVerbose(grey(" ? ", relPath))
 			return nil
 		}
 
@@ -129,6 +128,17 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 		}
 
 		hits, lines := parseFile(path, relPath, db, false)
+
+		if args.SuspectOnly {
+			hitsFiltered := []int{}
+			for _, idx := range hits {
+				if shouldHighlight(lines[idx]) {
+					hitsFiltered = append(hitsFiltered, idx)
+				}
+			}
+			hits = hitsFiltered
+		}
+
 		if len(hits) > 0 {
 			stats.filesWithChanges++
 			logInfo(boldred("\n X " + relPath))
@@ -137,7 +147,7 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 				if shouldHighlight(lines[idx]) {
 					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
-				} else if !args.Suspect {
+				} else if !args.SuspectOnly {
 					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
 				}
@@ -203,7 +213,7 @@ func main() {
 	args := setup()
 	db := loadDB(args.Database)
 
-	logInfo(boldwhite("Corediff ", corediffVersion, " loaded ", len(db), " precomputed hashes. (C) 2020-2023 labs@sansec.io"))
+	logInfo(boldwhite("Corediff ", corediffVersion, " loaded ", len(db), " precomputed hashes. (C) 2020-2024 labs@sansec.io"))
 	logInfo("Using database:", args.Database, "\n")
 
 	if args.Merge {

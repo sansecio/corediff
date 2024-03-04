@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/cespare/xxhash/v2"
@@ -16,16 +15,6 @@ func isCmsRoot(root string) bool {
 	for _, testPath := range cmsPaths {
 		full := root + testPath
 		if pathExists(full) {
-			return true
-		}
-	}
-	return false
-}
-
-func shouldHighlight(b []byte) bool {
-	for _, p := range highlightPatterns {
-		m, _ := regexp.Match(p, b)
-		if m {
 			return true
 		}
 	}
@@ -68,6 +57,7 @@ func logVerbose(a ...interface{}) {
 		fmt.Println(a...)
 	}
 }
+
 func logInfo(a ...interface{}) {
 	fmt.Println(a...)
 }
