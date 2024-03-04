@@ -29,7 +29,7 @@ type (
 		Add         bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
 		Merge       bool   `short:"m" long:"merge" description:"Merge databases"`
 		IgnorePaths bool   `short:"i" long:"ignore-paths" description:"Scan everything, not just core paths."`
-		Suspect     bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
+		SuspectOnly bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
 		NoCMS       bool   `long:"no-cms" description:"Don't check for CMS root when adding hashes. Do add file paths."`
 		Verbose     bool   `short:"v" long:"verbose" description:"Show what is going on"`
 	}
@@ -68,22 +68,6 @@ var (
 		"/wp-config.php",
 		"/lib/internal/Magento",
 		"/app/design/frontend/Magento",
-	}
-
-	highlightPatterns = []string{
-		`(fopen|hex2bin|die|exec|chr|hexdec)\(`,
-		`\$_[A-Z]`,
-		`GLOBALS`,
-		`\S["']\s*\.\s*['"]\S`,
-		`base64_`,
-		// `@(unlink|include|mysql)`, already more generic one below
-		`../../..`,
-		// `curl_exec,
-		`file_put_contents`,
-		`file_get_contents`,
-		`@[a-z_]+\(`,
-		`\$.\(\$.\(`,
-		`call_user_func_array`,
 	}
 
 	// They vary often, so add these to core paths when adding signatures
