@@ -17,11 +17,10 @@ var (
 		`\/\*\s*\w+\s*\*\/.+\/\*\s*\w+\s*\*\/[^\s]+`,                       // comment obfuscation
 		`include\s{1,10}["'\x60](\w|\/)+\.(png|jpeg|svg|jpg|webp)["'\x60]`, // include php as image
 
-		// js
-		`(\\x[A-Z0-9]{2}){10,}`,
-
 		// common
 		`[a-zA-Z0-9\/\+\=]{25,}`, // long base64 string
+		`(\\x[A-Z0-9]{2}){15,}`,  // long hex string
+		`(_0x\w{4,8}.+){4,}`,     // multiple obfuscated variables
 	})
 	highlightPatternsLit = [][]byte{
 		// php
@@ -44,6 +43,7 @@ var (
 		[]byte(`call_user_func_array`),
 
 		[]byte(`base64_`),
+		[]byte(`strrev`),
 		[]byte(`str_rot13`),
 		[]byte(`htmlspecialchars_decode`),
 
@@ -78,6 +78,7 @@ var (
 
 		[]byte(`$obirninja`),
 		[]byte(`$pass`),
+		[]byte(`<?php @'$`),
 
 		// js
 		[]byte(`atob`),
