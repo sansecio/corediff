@@ -22,7 +22,19 @@ var (
 )
 
 func loadDB(path string) hashDB {
-	m := make(hashDB)
+	// get file size of path to pre allocate proper map size
+	fi, err := os.Stat(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	size := fi.Size()
+	// fatal if not multiple of 8
+	if size%8 != 0 {
+		log.Fatal("Invalid database size, corrupt?")
+	}
+
+	// create a map of size
+	m := make(hashDB, size/8)
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return m
@@ -31,8 +43,8 @@ func loadDB(path string) hashDB {
 	}
 	defer f.Close()
 	reader := bufio.NewReader(f)
+	var b uint64
 	for {
-		var b uint64
 		err = binary.Read(reader, binary.LittleEndian, &b)
 		if err == io.EOF {
 			break
@@ -45,19 +57,27 @@ func loadDB(path string) hashDB {
 }
 
 func saveDB(path string, db hashDB) {
-	f, err := os.Create(path)
+	tmpPath := path + ".tmp"
+	f, err := os.Create(tmpPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close()
+	defer os.Remove(tmpPath)
 	for k := range db {
 		if err := binary.Write(f, binary.LittleEndian, k); err != nil {
 			log.Fatal(err)
 		}
 	}
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		log.Fatal(err)
+	}
 }
 
-func parseFile(path, relPath string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
+func parseFile(path string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
 	fh, err := os.Open(path)
 	if os.IsNotExist(err) {
 		logInfo(warn("file does not exist: " + path))
@@ -131,7 +151,7 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 			}
 		}
 
-		hits, lines := parseFile(path, relPath, db, false)
+		hits, lines := parseFile(path, db, false)
 
 		if args.SuspectOnly {
 			hitsFiltered := []int{}
@@ -197,7 +217,7 @@ func addPath(root string, db hashDB, args *baseArgs) {
 			db[pathHash(relPath)] = placeholder
 		}
 
-		hits, _ := parseFile(path, relPath, db, true)
+		hits, _ := parseFile(path, db, true)
 		if len(hits) > 0 {
 			logVerbose(green(" U " + relPath))
 		} else {
