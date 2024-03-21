@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	highlightPatternsRe = compileRegexps([]string{
+	highlightPatternsReg = compileRegexps([]string{
 		// php
 		`\$_[A-Z]`,       // $_GET, $_POST, etc.
 		`\S"\s*\.\s*"\S`, // " . "
@@ -42,7 +42,6 @@ var (
 		[]byte(`create_function`),
 		[]byte(`call_user_func_array`),
 
-		[]byte(`base64_`),
 		[]byte(`strrev`),
 		[]byte(`str_rot13`),
 		[]byte(`htmlspecialchars_decode`),
@@ -88,6 +87,7 @@ var (
 
 		// common
 		[]byte(`../../../../../../`),
+		[]byte(`base64`),
 		[]byte(`eval`),
 	}
 )
@@ -106,7 +106,7 @@ func shouldHighlight(b []byte) bool {
 			return true
 		}
 	}
-	for _, rx := range highlightPatternsRe {
+	for _, rx := range highlightPatternsReg {
 		if rx.Match(b) {
 			return true
 		}

@@ -113,7 +113,7 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 
 		stats.totalFiles++
 
-		if (args.AllValidText && !isValidUtf8(path)) || !hasValidExt(path) {
+		if (!args.AllValidText && !hasValidExt(path)) || (args.AllValidText && !isValidUtf8(path)) {
 			stats.filesNoCode++
 			return nil
 		}
@@ -194,14 +194,12 @@ func addPath(root string, db hashDB, args *baseArgs) {
 			return nil
 		}
 
-		if args.AllValidText && !isValidUtf8(path) {
+		if !args.AllValidText && !hasValidExt(path) {
+			logVerbose(grey(" - ", relPath, " (no code)"))
+			return nil
+		} else if !isValidUtf8(path) {
 			logVerbose(grey(" - ", relPath, " (invalid utf8)"))
 			return nil
-		} else {
-			if !hasValidExt(path) {
-				logVerbose(grey(" - ", relPath, " (no code)"))
-				return nil
-			}
 		}
 
 		// If relPath has valid ext, add hash of "path:<relPath>" to db
