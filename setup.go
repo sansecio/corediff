@@ -58,8 +58,6 @@ var (
 
 	logLevel = 1
 
-	globalDB hashDB
-
 	buf = make([]byte, 0, maxTokenSize)
 
 	scanExts  = []string{"php", "phtml", "js", "htaccess", "sh"}
@@ -96,11 +94,6 @@ func setup() *baseArgs {
 	args := &baseArgs{}
 	argParser := flags.NewParser(args, flags.HelpFlag|flags.PrintErrors|flags.PassDoubleDash)
 	if _, err := argParser.Parse(); err != nil {
-		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrRequired {
-		} else {
-			// log.Fatal(err)
-			// fmt.Println("Config parse error:", err)
-		}
 		os.Exit(1)
 	}
 

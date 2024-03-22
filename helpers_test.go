@@ -3,9 +3,6 @@ package main
 import "testing"
 
 func Test_pathIsExcluded(t *testing.T) {
-	type args struct {
-		p string
-	}
 	tests := []struct {
 		arg  string
 		want bool
