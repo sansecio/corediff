@@ -63,5 +63,5 @@ func Test_Corruption(t *testing.T) {
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
-
+	fmt.Println("lines", len(lines))
 }

@@ -38,11 +38,6 @@ func pathExists(p string) bool {
 	return err == nil
 }
 
-func isDir(path string) bool {
-	fi, err := os.Stat(path)
-	return err == nil && fi.IsDir()
-}
-
 func hasValidExt(path string) bool {
 	got := strings.TrimLeft(filepath.Ext(path), ".")
 	for _, want := range scanExts {

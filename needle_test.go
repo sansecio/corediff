@@ -15,7 +15,7 @@ func Test_Needle(t *testing.T) {
 	db := loadDB(dbpath)
 	fmt.Println("Loaded entries:", len(db))
 
-	for k, _ := range db {
+	for k := range db {
 		fmt.Println("first entry", k)
 		break
 	}

@@ -57,7 +57,7 @@ func saveDB(path string, db hashDB) {
 	}
 }
 
-func parseFile(path, relPath string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
+func parseFile(path, _ string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
 	fh, err := os.Open(path)
 	if os.IsNotExist(err) {
 		logInfo(warn("file does not exist: " + path))
