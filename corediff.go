@@ -113,7 +113,7 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 
 		stats.totalFiles++
 
-		if !hasValidExt(path) {
+		if (!args.AllValidText && !hasValidExt(path)) || (args.AllValidText && !isValidUtf8(path)) {
 			stats.filesNoCode++
 			return nil
 		}
@@ -145,10 +145,12 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 
 		if len(hits) > 0 {
 			stats.filesWithChanges++
+			hasSuspectLines := false
 			logInfo(boldred("\n X " + relPath))
 			for _, idx := range hits {
 				// fmt.Println(string(lines[idx]))
 				if shouldHighlight(lines[idx]) {
+					hasSuspectLines = true
 					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
 				} else if !args.SuspectOnly {
@@ -156,9 +158,15 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
 				}
 			}
+			if hasSuspectLines {
+				stats.filesWithSuspectLines++
+			}
 			logInfo()
 		} else {
 			stats.filesWithoutChanges++
+			if args.Verbose {
+				stats.undetectedPaths = append(stats.undetectedPaths, path)
+			}
 			logVerbose(green(" V " + relPath))
 		}
 
@@ -186,8 +194,11 @@ func addPath(root string, db hashDB, args *baseArgs) {
 			return nil
 		}
 
-		if !hasValidExt(path) {
+		if !args.AllValidText && !hasValidExt(path) {
 			logVerbose(grey(" - ", relPath, " (no code)"))
+			return nil
+		} else if !isValidUtf8(path) {
+			logVerbose(grey(" - ", relPath, " (invalid utf8)"))
 			return nil
 		}
 
@@ -244,14 +255,23 @@ func main() {
 			logInfo("Found no new code hashes...")
 		}
 	} else {
+		without := "code"
+		if args.AllValidText {
+			without = "text"
+		}
 		for _, path := range args.Path.Path {
 			stats := checkPath(path, db, args)
 			logInfo("\n===============================================================================")
 			logInfo(" Corediff completed scanning", stats.totalFiles, "files in", path)
-			logInfo(" - Files with unrecognized lines   :", boldred(stats.filesWithChanges))
-			logInfo(" - Files with only recognized lines:", green(stats.filesWithoutChanges))
-			logInfo(" - Files with custom code          :", stats.filesCustomCode)
-			logInfo(" - Files without code              :", stats.filesNoCode)
+			logInfo(" - Files with unrecognized lines      :", boldred(stats.filesWithChanges), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithChanges))))
+			logInfo(" - Files with suspect lines           :", warn(stats.filesWithSuspectLines), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithSuspectLines))))
+			logInfo(" - Files with only recognized lines   :", green(stats.filesWithoutChanges), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithoutChanges))))
+			logInfo(" - Files with custom code             :", stats.filesCustomCode, grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesCustomCode))))
+			logInfo(" - Files without", without, "                :", stats.filesNoCode, grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesNoCode))))
+			logVerbose("Undetected paths:")
+			for _, p := range stats.undetectedPaths {
+				logVerbose("  ", p)
+			}
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/gobwas/glob"
@@ -50,6 +51,25 @@ func hasValidExt(path string) bool {
 		}
 	}
 	return false
+}
+
+func isValidUtf8(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	bytes := make([]byte, 1024*8) // 8 KB
+	if _, err := f.Read(bytes); err != nil {
+		return false
+	}
+
+	valid := utf8.Valid(bytes)
+	if !valid {
+		fmt.Println("Invalid UTF-8:", path)
+	}
+	return valid
 }
 
 func logVerbose(a ...interface{}) {
