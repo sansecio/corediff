@@ -35,8 +35,10 @@ var (
 		[]byte(`shell_exec`),
 		[]byte(`passthru`),
 		[]byte(`popen`),
+		[]byte(`system(`),
 		[]byte(`proc_open`),
 		[]byte(`pcntl_exec`),
+		[]byte(`pcntl_fork`),
 		[]byte(`escapeshellcmd`),
 		[]byte(`preg_replace`),
 		[]byte(`create_function`),
@@ -64,10 +66,10 @@ var (
 		[]byte(`gzwrite`),
 		[]byte(`gzfile`),
 
-		[]byte(`umask(0)`),
-		[]byte(`chmod($`),
-		[]byte(`chown($`),
-		[]byte(`chgrp($`),
+		[]byte(`umask(`),
+		[]byte(`chmod(`),
+		[]byte(`chown(`),
+		[]byte(`chgrp(`),
 		[]byte(`unlink(`),
 		[]byte(`rmdir(`),
 		[]byte(`mkdir(`),
@@ -86,7 +88,7 @@ var (
 		[]byte(`jQuery.getScript(`),
 
 		// common
-		[]byte(`../../../../../../`),
+		[]byte(`../../../../`),
 		[]byte(`base64`),
 		[]byte(`eval`),
 	}

@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"log"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,10 +14,10 @@ func digest(b uint64) string {
 func Test_parseFile(t *testing.T) {
 	hdb := hashDB{}
 	updateDB := true
-	hits, lines := parseFile("fixture/docroot/odd-encoding.js", "n/a", hdb, updateDB)
+	hits, lines := parseFile("fixture/docroot/odd-encoding.js", hdb, updateDB)
 	assert.Equal(t, 220, len(hdb))
 	assert.Equal(t, 220, len(hits))
-	assert.Equal(t, 471, len(lines))
+	assert.Equal(t, 220, len(lines))
 }
 
 func Test_hash(t *testing.T) {
@@ -47,21 +44,12 @@ func Test_vendor_bug(t *testing.T) {
 		t.Error("hash not in db")
 	}
 }
-func Test_Corruption(t *testing.T) {
-	fh, _ := os.Open("fixture/docroot/sample")
-	defer fh.Close()
 
-	lines := [][]byte{}
-
-	scanner := bufio.NewScanner(fh)
-	for scanner.Scan() {
-		x := scanner.Bytes()
-		l := make([]byte, len(x))
-		copy(l, x)
-		lines = append(lines, l)
-	}
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("lines", len(lines))
-}
+// Too slow to run in testing.B
+// func Test_loadFile(t *testing.T) {
+// 	for i := 0; i < 10; i++ {
+// 		start := time.Now()
+// 		loadDB("m2.db") // pre-allocating fixed map size saves 20% time
+// 		fmt.Println(time.Since(start))
+// 	}
+// }

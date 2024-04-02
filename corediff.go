@@ -22,7 +22,22 @@ var (
 )
 
 func loadDB(path string) hashDB {
-	m := make(hashDB)
+	// get file size of path to pre allocate proper map size
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		// creating new db?
+		return make(hashDB, 0)
+	} else if err != nil {
+		log.Fatal(err)
+	}
+	size := fi.Size()
+	// fatal if not multiple of 8
+	if size%8 != 0 {
+		log.Fatal("Invalid database size, corrupt?")
+	}
+
+	// create a map of size
+	m := make(hashDB, size/8)
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return m
@@ -31,8 +46,8 @@ func loadDB(path string) hashDB {
 	}
 	defer f.Close()
 	reader := bufio.NewReader(f)
+	var b uint64
 	for {
-		var b uint64
 		err = binary.Read(reader, binary.LittleEndian, &b)
 		if err == io.EOF {
 			break
@@ -45,25 +60,34 @@ func loadDB(path string) hashDB {
 }
 
 func saveDB(path string, db hashDB) {
-	f, err := os.Create(path)
+	f, err := os.CreateTemp(filepath.Dir(path), "corediff_temp_db")
 	if err != nil {
 		log.Fatal(err)
 	}
+	// defer executed in reverse order
+	defer os.Remove(f.Name())
 	defer f.Close()
 	for k := range db {
 		if err := binary.Write(f, binary.LittleEndian, k); err != nil {
 			log.Fatal(err)
 		}
 	}
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.Rename(f.Name(), path); err != nil {
+		log.Fatal(err)
+	}
 }
 
-func parseFile(path, _ string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
+func parseFile(path string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
 	fh, err := os.Open(path)
-	if os.IsNotExist(err) {
-		logInfo(warn("file does not exist: " + path))
+	if err != nil && os.IsNotExist(err) {
+		fmt.Println(warn("file does not exist: " + path))
 		return nil, nil
+	} else if err != nil {
+		log.Fatal("open error on", path, err)
 	}
-	check(err)
 	defer fh.Close()
 
 	scanner := bufio.NewScanner(fh)
@@ -71,12 +95,10 @@ func parseFile(path, _ string, db hashDB, updateDB bool) (hits []int, lines [][]
 	scanner.Buffer(buf, maxTokenSize)
 	for i := 0; scanner.Scan(); i++ {
 		x := scanner.Bytes()
-		l := make([]byte, len(x))
-		copy(l, x)
-		lines = append(lines, l)
-		h := hash(normalizeLine(l))
+		h := hash(normalizeLine(x))
 		if _, ok := db[h]; !ok {
 			hits = append(hits, i)
+			lines = append(lines, x) // to show specific line number
 			if updateDB {
 				db[h] = placeholder
 			}
@@ -131,37 +153,40 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 			}
 		}
 
-		hits, lines := parseFile(path, relPath, db, false)
+		hits, lines := parseFile(path, db, false)
 
 		if args.SuspectOnly {
 			hitsFiltered := []int{}
-			for _, idx := range hits {
-				if shouldHighlight(lines[idx]) {
-					hitsFiltered = append(hitsFiltered, idx)
+			linesFiltered := [][]byte{}
+			for i, lineNo := range hits {
+				if shouldHighlight(lines[i]) {
+					hitsFiltered = append(hitsFiltered, lineNo)
+					linesFiltered = append(linesFiltered, lines[i])
 				}
 			}
 			hits = hitsFiltered
+			lines = linesFiltered
 		}
 
 		if len(hits) > 0 {
 			stats.filesWithChanges++
 			hasSuspectLines := false
-			logInfo(boldred("\n X " + relPath))
-			for _, idx := range hits {
+			fmt.Println(boldred("\n X " + relPath))
+			for i, lineNo := range hits {
 				// fmt.Println(string(lines[idx]))
-				if shouldHighlight(lines[idx]) {
+				if shouldHighlight(lines[i]) {
 					hasSuspectLines = true
-					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
+					fmt.Println("  ", grey(fmt.Sprintf("%-5d", lineNo)), alarm(string(lines[i])))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
 				} else if !args.SuspectOnly {
-					logInfo("  ", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
+					fmt.Println("  ", grey(fmt.Sprintf("%-5d", lineNo)), string(lines[i]))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
 				}
 			}
 			if hasSuspectLines {
 				stats.filesWithSuspectLines++
 			}
-			logInfo()
+			fmt.Println()
 		} else {
 			stats.filesWithoutChanges++
 			if args.Verbose {
@@ -172,7 +197,9 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 
 		return nil
 	})
-	check(err)
+	if err != nil {
+		log.Fatalln("error walking the path", root, err)
+	}
 	return stats
 }
 
@@ -208,7 +235,7 @@ func addPath(root string, db hashDB, args *baseArgs) {
 			db[pathHash(relPath)] = placeholder
 		}
 
-		hits, _ := parseFile(path, relPath, db, true)
+		hits, _ := parseFile(path, db, true)
 		if len(hits) > 0 {
 			logVerbose(green(" U " + relPath))
 		} else {
@@ -217,7 +244,9 @@ func addPath(root string, db hashDB, args *baseArgs) {
 
 		return nil
 	})
-	check(err)
+	if err != nil {
+		log.Fatalln("error walking the path", root, err)
+	}
 }
 
 func main() {
@@ -228,31 +257,31 @@ func main() {
 	args := setup()
 	db := loadDB(args.Database)
 
-	logInfo(boldwhite("Corediff ", corediffVersion, " loaded ", len(db), " precomputed hashes. (C) 2020-2024 labs@sansec.io"))
-	logInfo("Using database:", args.Database, "\n")
+	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", len(db), " precomputed hashes. (C) 2020-2024 labs@sansec.io"))
+	fmt.Println("Using database:", args.Database)
 
 	if args.Merge {
 		for _, p := range args.Path.Path {
 			db2 := loadDB(p)
-			logInfo("Merging", filepath.Base(p), "with", len(db2), "entries ..")
+			fmt.Println("Merging", filepath.Base(p), "with", len(db2), "entries ..")
 			for k := range db2 {
 				db[k] = placeholder
 			}
 		}
-		logInfo("Saving", args.Database, "with a total of", len(db), "entries.")
+		fmt.Println("Saving", args.Database, "with a total of", len(db), "entries.")
 		saveDB(args.Database, db)
 	} else if args.Add {
 		oldSize := len(db)
 		for _, path := range args.Path.Path {
-			logInfo("Calculating checksums for", path, "\n")
+			fmt.Println("Calculating checksums for", path)
 			addPath(path, db, args)
-			logInfo()
+			fmt.Println()
 		}
 		if len(db) != oldSize {
-			logInfo("Computed", len(db)-oldSize, "new hashes, saving to", args.Database, "..")
+			fmt.Println("Computed", len(db)-oldSize, "new hashes, saving to", args.Database, "..")
 			saveDB(args.Database, db)
 		} else {
-			logInfo("Found no new code hashes...")
+			fmt.Println("Found no new code hashes...")
 		}
 	} else {
 		without := "code"
@@ -261,13 +290,13 @@ func main() {
 		}
 		for _, path := range args.Path.Path {
 			stats := checkPath(path, db, args)
-			logInfo("\n===============================================================================")
-			logInfo(" Corediff completed scanning", stats.totalFiles, "files in", path)
-			logInfo(" - Files with unrecognized lines      :", boldred(stats.filesWithChanges), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithChanges))))
-			logInfo(" - Files with suspect lines           :", warn(stats.filesWithSuspectLines), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithSuspectLines))))
-			logInfo(" - Files with only recognized lines   :", green(stats.filesWithoutChanges), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithoutChanges))))
-			logInfo(" - Files with custom code             :", stats.filesCustomCode, grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesCustomCode))))
-			logInfo(" - Files without", without, "                :", stats.filesNoCode, grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesNoCode))))
+			fmt.Println("\n===============================================================================")
+			fmt.Println(" Corediff completed scanning", stats.totalFiles, "files in", path)
+			fmt.Println(" - Files with unrecognized lines      :", boldred(fmt.Sprintf("%7d", stats.filesWithChanges)), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithChanges))))
+			fmt.Println(" - Files with suspect lines           :", warn(fmt.Sprintf("%7d", stats.filesWithSuspectLines)), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithSuspectLines))))
+			fmt.Println(" - Files with only recognized lines   :", green(fmt.Sprintf("%7d", stats.filesWithoutChanges)), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithoutChanges))))
+			fmt.Println(" - Files with custom code             :", fmt.Sprintf("%7d", stats.filesCustomCode), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesCustomCode))))
+			fmt.Println(" - Files without", without, "                :", fmt.Sprintf("%7d", stats.filesNoCode), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesNoCode))))
 			logVerbose("Undetected paths:")
 			for _, p := range stats.undetectedPaths {
 				logVerbose("  ", p)

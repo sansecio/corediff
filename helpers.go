@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cespare/xxhash/v2"
-	"github.com/gobwas/glob"
 )
 
 func isCmsRoot(root string) bool {
@@ -73,16 +72,6 @@ func logVerbose(a ...interface{}) {
 	}
 }
 
-func logInfo(a ...interface{}) {
-	fmt.Println(a...)
-}
-
-func check(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 func hash(b []byte) uint64 {
 	return xxhash.Sum64(b)
 }
@@ -94,8 +83,7 @@ func pathHash(p string) uint64 {
 func pathIsExcluded(p string) bool {
 	// Does p match any of excludePaths ?
 	for _, xx := range excludePaths {
-		// TODO: optim with precompile
-		if glob.MustCompile(xx).Match(p) {
+		if xx.Match(p) {
 			return true
 		}
 	}
