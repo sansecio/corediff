@@ -60,13 +60,13 @@ func loadDB(path string) hashDB {
 }
 
 func saveDB(path string, db hashDB) {
-	tmpPath := path + ".tmp"
-	f, err := os.Create(tmpPath)
+	f, err := os.CreateTemp(filepath.Dir(path), "corediff_temp_db")
 	if err != nil {
 		log.Fatal(err)
 	}
+	// defer executed in reverse order
+	defer os.Remove(f.Name())
 	defer f.Close()
-	defer os.Remove(tmpPath)
 	for k := range db {
 		if err := binary.Write(f, binary.LittleEndian, k); err != nil {
 			log.Fatal(err)
@@ -75,7 +75,7 @@ func saveDB(path string, db hashDB) {
 	if err := f.Close(); err != nil {
 		log.Fatal(err)
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := os.Rename(f.Name(), path); err != nil {
 		log.Fatal(err)
 	}
 }
