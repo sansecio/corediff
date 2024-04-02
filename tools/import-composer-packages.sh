@@ -12,6 +12,8 @@ else
 fi
 echo "Using tempdir $tempdir"
 
+default_packages="composer.base composer.pkgs"
+source_pkgs="${1:-$default_packages}"
 
 cleanup() {
   echo "Cleaning up..."
@@ -24,7 +26,7 @@ trap cleanup EXIT INT TERM
 export COMPOSER_HOME=$PWD/.composer
 
 mkdir -p db
-cat composer.base composer.pkgs | while read pkg; do
+cat $source_pkgs | while read pkg; do
     echo $pkg
     for ver in $(composer show --no-interaction --no-plugins $pkg -a --format=json 2>/dev/null | jq -r '.versions[]' 2>/dev/null | head -n $maxpkgs); do
         rm -rf $tempdir
@@ -54,3 +56,4 @@ cat composer.base composer.pkgs | while read pkg; do
 done
 
 corediff -d m2.db -m db/*.db
+chmod 644 m2.db
