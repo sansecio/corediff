@@ -72,10 +72,6 @@ func logVerbose(a ...interface{}) {
 	}
 }
 
-func logInfo(a ...interface{}) {
-	fmt.Println(a...)
-}
-
 func hash(b []byte) uint64 {
 	return xxhash.Sum64(b)
 }
