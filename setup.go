@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/fatih/color"
+	"github.com/gobwas/glob"
 	"github.com/gwillem/urlfilecache"
 	"github.com/jessevdk/go-flags"
 )
@@ -74,11 +76,11 @@ var (
 	// They vary often, so add these to core paths when adding signatures
 	// However, do process their contents, so files can be inspected with
 	// corediff --ignore-paths
-	excludePaths = []string{
+	excludePaths = []glob.Glob{
 		// "vendor/composer/**",
-		"vendor/composer/autoload_*.php",
-		"generated/**",
-		"var/**",
+		glob.MustCompile("vendor/composer/autoload_*.php"),
+		glob.MustCompile("generated/**"),
+		glob.MustCompile("var/**"),
 	}
 )
 
@@ -117,9 +119,13 @@ func setup() *baseArgs {
 		}
 
 		path, err = filepath.Abs(path)
-		check(err)
+		if err != nil {
+			log.Fatal("Error getting absolute path:", err)
+		}
 		path, err = filepath.EvalSymlinks(path)
-		check(err)
+		if err != nil {
+			log.Fatal("Error eval'ing symlinks for", path, err)
+		}
 
 		if !args.Merge && !args.IgnorePaths && !args.NoCMS && !isCmsRoot(path) {
 			fmt.Println("!!!", path)

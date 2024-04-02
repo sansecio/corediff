@@ -1,9 +1,24 @@
 package main
 
-import "regexp"
+import (
+	"regexp"
+)
 
-var highlightPatternsRe = compileRegexps([]string{
-	`(fopen|hex2bin|die|exec|chr|hexdec|eval)\(`,
+var highlightPatterns = []string{
+	`fopen\(`,
+	`hex2bin\(`,
+	`die\(`,
+	`exec\(`,
+	`chr\(`,
+	`hexdec\(`,
+	`eval\(`,
+	`system\(`,
+	`shell_exec\(`,
+	`passthru\(`,
+	`popen\(`,
+	`proc_open\(`,
+	`pcntl_exec\(`,
+	`pcntl_fork\(`,
 	`\$_[A-Z]`,
 	`GLOBALS`,
 	`\S"\s*\.\s*"\S`, // " . "
@@ -19,7 +34,9 @@ var highlightPatternsRe = compileRegexps([]string{
 	`\$.\(\$.\(`,
 	`call_user_func_array`,
 	`\@\$\w{1,12}\(`, // suppressed dynamic function call
-})
+}
+
+var highlightPatternsRe = compileRegexps(highlightPatterns)
 
 func compileRegexps(patterns []string) []*regexp.Regexp {
 	rxs := make([]*regexp.Regexp, len(patterns))

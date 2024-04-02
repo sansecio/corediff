@@ -24,7 +24,10 @@ var (
 func loadDB(path string) hashDB {
 	// get file size of path to pre allocate proper map size
 	fi, err := os.Stat(path)
-	if err != nil {
+	if os.IsNotExist(err) {
+		// creating new db?
+		return make(hashDB, 0)
+	} else if err != nil {
 		log.Fatal(err)
 	}
 	size := fi.Size()
@@ -79,11 +82,12 @@ func saveDB(path string, db hashDB) {
 
 func parseFile(path string, db hashDB, updateDB bool) (hits []int, lines [][]byte) {
 	fh, err := os.Open(path)
-	if os.IsNotExist(err) {
+	if err != nil && os.IsNotExist(err) {
 		logInfo(warn("file does not exist: " + path))
 		return nil, nil
+	} else if err != nil {
+		log.Fatal("open error on", path, err)
 	}
-	check(err)
 	defer fh.Close()
 
 	scanner := bufio.NewScanner(fh)
@@ -110,8 +114,7 @@ func parseFile(path string, db hashDB, updateDB bool) (hits []int, lines [][]byt
 	return hits, lines
 }
 
-func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
-	stats := &walkStats{}
+func checkPath(root string, db hashDB, args *baseArgs) (stats *walkStats) {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		var relPath string
 		if path == root {
@@ -184,7 +187,9 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 
 		return nil
 	})
-	check(err)
+	if err != nil {
+		log.Fatalln("error walking the path", root, err)
+	}
 	return stats
 }
 
@@ -226,7 +231,9 @@ func addPath(root string, db hashDB, args *baseArgs) {
 
 		return nil
 	})
-	check(err)
+	if err != nil {
+		log.Fatalln("error walking the path", root, err)
+	}
 }
 
 func main() {
