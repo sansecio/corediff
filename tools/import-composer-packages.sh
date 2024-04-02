@@ -1,8 +1,9 @@
 #!/bin/bash
 
+cd "$(dirname "$0")"
+
 # set -x
 maxpkgs=150
-
 
 if [ -e /dev/shm ]; then
     tempdir=$(mktemp -d -p /dev/shm)
