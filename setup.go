@@ -16,27 +16,34 @@ type (
 	hashDB map[uint64]struct{}
 
 	walkStats struct {
-		totalFiles          int
-		filesWithChanges    int
-		filesWithoutChanges int
-		filesNoCode         int
-		filesCustomCode     int
+		totalFiles            int
+		filesWithSuspectLines int
+		filesWithChanges      int
+		filesWithoutChanges   int
+		filesNoCode           int
+		filesCustomCode       int
+		undetectedPaths       []string
 	}
 
 	baseArgs struct {
 		Path struct {
 			Path []string `positional-arg-name:"<path>" required:"1"`
 		} `positional-args:"yes" description:"Scan file or dir" required:"true"`
-		Database    string `short:"d" long:"database" description:"Hash database path (default: download Sansec database)"`
-		Add         bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
-		Merge       bool   `short:"m" long:"merge" description:"Merge databases"`
-		IgnorePaths bool   `short:"i" long:"ignore-paths" description:"Scan everything, not just core paths."`
-		SuspectOnly bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
-		NoCMS       bool   `long:"no-cms" description:"Don't check for CMS root when adding hashes. Do add file paths."`
-		Verbose     bool   `short:"v" long:"verbose" description:"Show what is going on"`
-		PathFilter  string `short:"f" long:"path-filter" description:"Applies a path filter prior to diffing (e.g. vendor/magento)"`
+		Database     string `short:"d" long:"database" description:"Hash database path (default: download Sansec database)"`
+		Add          bool   `short:"a" long:"add" description:"Add new hashes to DB, do not check"`
+		Merge        bool   `short:"m" long:"merge" description:"Merge databases"`
+		IgnorePaths  bool   `short:"i" long:"ignore-paths" description:"Scan everything, not just core paths."`
+		SuspectOnly  bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
+		AllValidText bool   `short:"t" long:"text" description:"Scan all valid UTF-8 text files, instead of just files with valid prefixes."`
+		NoCMS        bool   `long:"no-cms" description:"Don't check for CMS root when adding hashes. Do add file paths."`
+		Verbose      bool   `short:"v" long:"verbose" description:"Show what is going on"`
+		PathFilter   string `short:"f" long:"path-filter" description:"Applies a path filter prior to diffing (e.g. vendor/magento)"`
 	}
 )
+
+func (stats *walkStats) percentage(of int) float64 {
+	return float64(of) / float64(stats.totalFiles) * 100
+}
 
 const (
 	hashDBURL    = "https://sansec.io/downloads/corediff-db/corediff.bin"
@@ -52,8 +59,6 @@ var (
 	green     = color.New(color.FgGreen).SprintFunc()
 
 	logLevel = 1
-
-	globalDB hashDB
 
 	buf = make([]byte, 0, maxTokenSize)
 
@@ -91,11 +96,6 @@ func setup() *baseArgs {
 	args := &baseArgs{}
 	argParser := flags.NewParser(args, flags.HelpFlag|flags.PrintErrors|flags.PassDoubleDash)
 	if _, err := argParser.Parse(); err != nil {
-		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrRequired {
-		} else {
-			// log.Fatal(err)
-			// fmt.Println("Config parse error:", err)
-		}
 		os.Exit(1)
 	}
 
