@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -21,6 +22,10 @@ func isCmsRoot(root string) bool {
 	return false
 }
 
+var normalizeRx = []*regexp.Regexp{
+	regexp.MustCompile(`'reference' => '[a-f0-9]{40}',`),
+}
+
 func normalizeLine(b []byte) []byte {
 	// Also strip slashes comments etc
 	b = bytes.TrimSpace(b)
@@ -28,6 +33,10 @@ func normalizeLine(b []byte) []byte {
 		if bytes.HasPrefix(b, prefix) {
 			return []byte{}
 		}
+	}
+
+	for _, rx := range normalizeRx {
+		b = rx.ReplaceAllLiteral(b, nil)
 	}
 	return b
 }
