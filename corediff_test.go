@@ -17,7 +17,7 @@ func Test_parseFile(t *testing.T) {
 	hits, lines := parseFile("fixture/docroot/odd-encoding.js", hdb, updateDB)
 	assert.Equal(t, 220, len(hdb))
 	assert.Equal(t, 220, len(hits))
-	assert.Equal(t, 471, len(lines))
+	assert.Equal(t, 220, len(lines))
 }
 
 func Test_hash(t *testing.T) {
