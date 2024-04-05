@@ -6,6 +6,8 @@ import (
 )
 
 var (
+	//    58           protected $customerRepositoryFactory;
+
 	highlightPatternsReg = compileRegexps([]string{
 		// php
 		`\$_[A-Z]`,       // $_GET, $_POST, etc.
@@ -18,9 +20,9 @@ var (
 		`include\s{1,10}["'\x60](\w|\/)+\.(png|jpeg|svg|jpg|webp)["'\x60]`, // include php as image
 
 		// common
-		`[a-zA-Z0-9\/\+\=]{25,}`, // long base64 string
-		`(\\x[A-Z0-9]{2}){15,}`,  // long hex string
-		`(_0x\w{4,8}.+){4,}`,     // multiple obfuscated variables
+		`[a-zA-Z0-9\/\+\=]{80,}`,   // long base64 string
+		`(\\x[A-Fa-f0-9]{2}){15,}`, // long hex string
+		`(_0x\w{4,8}.+){4,}`,       // multiple obfuscated variables
 	})
 	highlightPatternsLit = [][]byte{
 		// php
@@ -31,7 +33,7 @@ var (
 		[]byte(`chr(`),
 		[]byte(`hexdec(`),
 
-		[]byte(`exec`),
+		[]byte(`exec(`), // without (, it will trigger on execute which is common
 		[]byte(`shell_exec`),
 		[]byte(`passthru`),
 		[]byte(`popen`),

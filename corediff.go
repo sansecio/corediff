@@ -148,7 +148,7 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 		if info.IsDir() {
 			return nil
 		}
-		if args.PathFilter != "" && !strings.HasPrefix(relPath, args.PathFilter) {
+		if args.PathFilter != "" && !strings.Contains(relPath, args.PathFilter) {
 			return nil
 		}
 
@@ -172,33 +172,33 @@ func checkPath(root string, db hashDB, args *baseArgs) *walkStats {
 			}
 		}
 
-		hits, lines := parseFile(path, db, false)
+		lnums, lines := parseFile(path, db, false)
 
 		if args.SuspectOnly {
-			hitsFiltered := []int{}
+			lnumsFiltered := []int{}
 			linesFiltered := [][]byte{}
-			for i, lineNo := range hits {
+			for i := range lnums {
 				if shouldHighlight(lines[i]) {
-					hitsFiltered = append(hitsFiltered, lineNo)
+					lnumsFiltered = append(lnumsFiltered, lnums[i])
 					linesFiltered = append(linesFiltered, lines[i])
 				}
 			}
-			hits = hitsFiltered
+			lnums = lnumsFiltered
 			lines = linesFiltered
 		}
 
-		if len(hits) > 0 {
+		if len(lnums) > 0 {
 			stats.filesWithChanges++
 			hasSuspectLines := false
 			fmt.Println(boldred("\n X " + relPath))
-			for i, lineNo := range hits {
+			for i, lnum := range lnums {
 				// fmt.Println(string(lines[idx]))
 				if shouldHighlight(lines[i]) {
 					hasSuspectLines = true
-					fmt.Println("  ", grey(fmt.Sprintf("%-5d", lineNo)), alarm(string(lines[i])))
+					fmt.Println("  ", grey(fmt.Sprintf("%-5d", lnum)), alarm(string(lines[i])))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), alarm(string(lines[idx])))
 				} else if !args.SuspectOnly {
-					fmt.Println("  ", grey(fmt.Sprintf("%-5d", lineNo)), string(lines[i]))
+					fmt.Println("  ", grey(fmt.Sprintf("%-5d", lnum)), string(lines[i]))
 					// fmt.Printf("%s %s\n", grey(fmt.Sprintf("%-5d", idx)), string(lines[idx]))
 				}
 			}
