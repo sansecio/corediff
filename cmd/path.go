@@ -75,12 +75,6 @@ func isValidUtf8(path string) bool {
 	return valid
 }
 
-func logVerbose(a ...interface{}) {
-	if logLevel >= 3 {
-		fmt.Println(a...)
-	}
-}
-
 func hash(b []byte) uint64 {
 	return xxhash.Sum64(b)
 }
