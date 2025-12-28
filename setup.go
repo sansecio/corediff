@@ -83,6 +83,8 @@ var (
 	// corediff --ignore-paths
 	excludePaths = []glob.Glob{
 		// "vendor/composer/**",
+		glob.MustCompile("vendor/aws/aws-sdk-php/src/data/**"),
+		glob.MustCompile("vendor/symfony/intl/Resources/data/**"),
 		glob.MustCompile("vendor/composer/autoload_*.php"),
 		glob.MustCompile("generated/**"),
 		glob.MustCompile("var/**"),
