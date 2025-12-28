@@ -1,7 +1,7 @@
 /*
    corediff: quickly find unauthorized code changes to common applications
 
-   Copyright (C) 2020-2024 Willem de Groot <gwillem@gmail.com>
+   Copyright (C) 2020-2026 Sansec BV contributors <info@sansec.io>
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
