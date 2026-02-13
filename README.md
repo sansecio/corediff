@@ -8,7 +8,7 @@ A forensic tool to quickly find unauthorized modifications in an open source cod
 
 > _"Very useful to gauge foreign codebases"_
 
-Corediff was created by [Sansec](https://sansec.io/?corediff), specialists in Magento security and digital forensics since 2010. Corediff analysis helped us to uncover numerous cases of server side payment skimming that would otherwise have gone undetected.
+Corediff was created by Willem de Groot, specialist in Magento security and digital forensics since 2010. Corediff analysis helped to uncover numerous cases of server side payment skimming that would otherwise have gone undetected.
 
 # Usage
 
@@ -17,11 +17,11 @@ Usage:
   corediff [OPTIONS] <path>...
 
 Application Options:
-  -d, --database=     Hash database path (default: download Sansec database)
+  -d, --database=     Hash database path (default: download Willem de Groot database)
   -a, --add           Add new hashes to DB, do not check
   -m, --merge         Merge databases
   -i, --ignore-paths  Scan everything, not just core paths.
-      --no-cms        Don't check for CMS root when adding hashes. Do add file paths.
+      --no-platform        Don't check for app root when adding hashes. Do add file paths.
   -v, --verbose       Show what is going on
 ```
 
@@ -47,12 +47,12 @@ chmod 755 corediff
 Or compile from source (requires recent Go version):
 
 ```sh
-git clone https://github.com/sansecio/corediff.git
+git clone https://github.com/gwillem/corediff.git
 cd corediff
 go run . <store-path>
 ```
 
-At the first run, `corediff` will automatically download the Sansec hash database.
+At the first run, `corediff` will automatically download the hash database.
 
 # Community contributed datasets
 
@@ -78,10 +78,10 @@ corediff --database=all.db --merge magento1.db magento2.db *.db
 
 In some cases, it is better to not add file paths to the hash database. All paths found in the database will be examined and reported in default mode. Should many varieties exist for a particular file (such as in DI/compiled code), we would rather exclude its scanning from default output, until we can be reasonably certain to have coverage for 99%+ versions out there. So for volatile paths, use the `--add --ignore-paths` options.
 
-Contributions welcome! Naturally, we only accept hashes from trusted sources. [Contact us to discuss your contribution](mailto:info@sansec.io).
+Contributions welcome! Naturally, we only accept hashes from trusted sources.
 
-# About Sansec
+# About
 
-Sansec's flagship software [eComscan](https://sansec.io/?corediff) is used by ecommerce agencies, law enforcement and PCI forensic investigators. We are proud to open source many of our internal tools and hope that it will benefit our partners and customers. Malware contributions welcome.
+Created by Willem de Groot. Malware contributions welcome.
 
-(C) 2023 [Sansec BV](https://sansec.io/?corediff) // info@sansec.io
+(C) 2023-2026 Willem de Groot
