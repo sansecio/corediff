@@ -64,6 +64,7 @@ func (s *scanArg) Execute(_ []string) error {
 	if err != nil {
 		log.Fatal("Error loading database:", err)
 	}
+	defer db.Close()
 
 	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", db.Len(), " precomputed hashes. (C) 2023-2026 Willem de Groot"))
 	fmt.Println("Using database:", s.Database)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
+	"unsafe"
 )
 
 const (
@@ -19,16 +21,65 @@ type dbHeader struct {
 	Count   uint64
 }
 
-// OpenReadOnly opens a hash database for querying only. Add() will panic.
-func OpenReadOnly(path string) (*HashDB, error) {
-	data, err := readDB(path)
+// OpenReadOnly opens a hash database for querying only using mmap.
+// The returned HashDB must be closed with Close() to release the mapping.
+// Add() will panic.
+func OpenReadOnly(path string) (db *HashDB, err error) {
+	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
-	return &HashDB{main: data, readOnly: true}, nil
+	size := fi.Size()
+	if size == 0 {
+		return &HashDB{readOnly: true}, nil
+	}
+	if size < headerSize {
+		return nil, fmt.Errorf("file too small for CDDB header")
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	mmapData, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_PRIVATE)
+	if err != nil {
+		return nil, fmt.Errorf("mmap: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			syscall.Munmap(mmapData)
+		}
+	}()
+
+	// Validate header from mmap'd bytes
+	if string(mmapData[0:4]) != dbMagic {
+		return nil, fmt.Errorf("not a CDDB file (bad magic)")
+	}
+	version := binary.LittleEndian.Uint32(mmapData[4:8])
+	if version != dbVersion {
+		return nil, fmt.Errorf("unsupported database version %d (max supported: %d)", version, dbVersion)
+	}
+	count := binary.LittleEndian.Uint64(mmapData[8:16])
+	dataSize := size - headerSize
+	if dataSize%8 != 0 {
+		return nil, fmt.Errorf("invalid database size, corrupt?")
+	}
+	if int64(count) != dataSize/8 {
+		return nil, fmt.Errorf("header count %d doesn't match data (%d entries)", count, dataSize/8)
+	}
+
+	var main []uint64
+	if count > 0 {
+		main = unsafe.Slice((*uint64)(unsafe.Pointer(&mmapData[headerSize])), count)
+	}
+
+	return &HashDB{main: main, readOnly: true, mmapData: mmapData}, nil
 }
 
 // OpenReadWrite opens a hash database for querying and mutation.
+// Data is read into owned memory; no mmap is used.
 func OpenReadWrite(path string) (*HashDB, error) {
 	data, err := readDB(path)
 	if err != nil {
@@ -75,16 +126,15 @@ func readDB(path string) ([]uint64, error) {
 	if size == 0 {
 		return nil, nil
 	}
+	if size < headerSize {
+		return nil, fmt.Errorf("file too small for CDDB header")
+	}
 
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-
-	if size < headerSize {
-		return nil, fmt.Errorf("file too small for CDDB header")
-	}
 
 	var hdr dbHeader
 	if err := binary.Read(f, binary.LittleEndian, &hdr); err != nil {

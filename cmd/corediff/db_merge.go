@@ -26,6 +26,7 @@ func (m *dbMergeArg) Execute(_ []string) error {
 		}
 		fmt.Printf("Merging %s with %d entries ..\n", p, db.Len())
 		out.Merge(db)
+		db.Close()
 	}
 
 	out.Compact()

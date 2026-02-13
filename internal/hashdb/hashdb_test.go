@@ -183,3 +183,99 @@ func TestFileNotFound(t *testing.T) {
 	_, err := OpenReadOnly("/nonexistent/path.db")
 	assert.Error(t, err)
 }
+
+func TestMmapMatchesReadWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.db")
+
+	db := New()
+	for i := uint64(0); i < 1000; i++ {
+		db.Add(i * 7)
+	}
+	require.NoError(t, db.Save(path))
+
+	ro, err := OpenReadOnly(path)
+	require.NoError(t, err)
+	defer ro.Close()
+
+	rw, err := OpenReadWrite(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, rw.Len(), ro.Len())
+	for i := uint64(0); i < 1000; i++ {
+		h := i * 7
+		assert.Equal(t, rw.Contains(h), ro.Contains(h), "mismatch for %d", h)
+	}
+	// Check some values not in the DB
+	assert.False(t, ro.Contains(1))
+	assert.False(t, ro.Contains(9999))
+}
+
+func TestClose(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.db")
+
+	db := New()
+	db.Add(1)
+	require.NoError(t, db.Save(path))
+
+	ro, err := OpenReadOnly(path)
+	require.NoError(t, err)
+	assert.True(t, ro.Contains(1))
+	require.NoError(t, ro.Close())
+
+	// Close on non-mmap DB is a no-op
+	rw := New()
+	require.NoError(t, rw.Close())
+}
+
+func createBenchDB(b *testing.B, n int) string {
+	b.Helper()
+	dir := b.TempDir()
+	path := filepath.Join(dir, "bench.db")
+	db := New()
+	for i := 0; i < n; i++ {
+		db.Add(uint64(i) * 31)
+	}
+	if err := db.Save(path); err != nil {
+		b.Fatal(err)
+	}
+	return path
+}
+
+func BenchmarkOpenReadOnly(b *testing.B) {
+	path := createBenchDB(b, 100_000)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		db, err := OpenReadOnly(path)
+		if err != nil {
+			b.Fatal(err)
+		}
+		db.Close()
+	}
+}
+
+func BenchmarkOpenReadWrite(b *testing.B) {
+	path := createBenchDB(b, 100_000)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		db, err := OpenReadWrite(path)
+		if err != nil {
+			b.Fatal(err)
+		}
+		_ = db
+	}
+}
+
+func BenchmarkContains(b *testing.B) {
+	path := createBenchDB(b, 100_000)
+	db, err := OpenReadOnly(path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		db.Contains(uint64(i) * 31)
+	}
+}

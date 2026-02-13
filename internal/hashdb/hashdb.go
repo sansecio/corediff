@@ -1,6 +1,9 @@
 package hashdb
 
-import "sort"
+import (
+	"sort"
+	"syscall"
+)
 
 // HashDB stores precomputed hashes using sorted slices for memory efficiency.
 // The main slice is sorted and deduped; buf is an unsorted append buffer.
@@ -8,6 +11,7 @@ type HashDB struct {
 	main     []uint64
 	buf      []uint64
 	readOnly bool
+	mmapData []byte // non-nil when backed by mmap
 }
 
 // New creates an empty read-write HashDB.
@@ -73,4 +77,15 @@ func (db *HashDB) Compact() {
 // Len returns the total number of entries (main + buffer, may include dupes).
 func (db *HashDB) Len() int {
 	return len(db.main) + len(db.buf)
+}
+
+// Close releases resources. Must be called on mmap-backed databases.
+func (db *HashDB) Close() error {
+	if db.mmapData != nil {
+		err := syscall.Munmap(db.mmapData)
+		db.mmapData = nil
+		db.main = nil
+		return err
+	}
+	return nil
 }
