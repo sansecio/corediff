@@ -1,83 +1,76 @@
 package hashdb
 
-import (
-	"bufio"
-	"encoding/binary"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-)
+import "sort"
 
-// HashDB stores precomputed hashes for fast lookup.
-type HashDB map[uint64]struct{}
+// HashDB stores precomputed hashes using sorted slices for memory efficiency.
+// The main slice is sorted and deduped; buf is an unsorted append buffer.
+type HashDB struct {
+	main     []uint64
+	buf      []uint64
+	readOnly bool
+}
 
-// New creates an empty HashDB with pre-allocated capacity.
-func New() HashDB {
-	return make(HashDB, 1024*1024)
+// New creates an empty read-write HashDB.
+func New() *HashDB {
+	return &HashDB{}
 }
 
 // Contains reports whether h is in the database.
-func (db HashDB) Contains(h uint64) bool {
-	_, ok := db[h]
-	return ok
-}
-
-// Add inserts h into the database.
-func (db HashDB) Add(h uint64) {
-	db[h] = struct{}{}
-}
-
-// Load reads a hash database from a binary file of little-endian uint64 values.
-func Load(path string) (HashDB, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return nil, err
+// Uses binary search on the sorted main slice and linear scan on the buffer.
+func (db *HashDB) Contains(h uint64) bool {
+	i := sort.Search(len(db.main), func(i int) bool {
+		return db.main[i] >= h
+	})
+	if i < len(db.main) && db.main[i] == h {
+		return true
 	}
-	size := fi.Size()
-	if size%8 != 0 {
-		return nil, fmt.Errorf("invalid database size, corrupt?")
-	}
-
-	m := make(HashDB, size/8)
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		return m, nil
-	} else if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	reader := bufio.NewReader(f)
-	var b uint64
-	for {
-		err = binary.Read(reader, binary.LittleEndian, &b)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-		m[b] = struct{}{}
-	}
-	return m, nil
-}
-
-// Save writes the hash database to a binary file atomically.
-func Save(path string, db HashDB) error {
-	f, err := os.CreateTemp(filepath.Dir(path), "corediff_temp_db")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-
-	for k := range db {
-		if err := binary.Write(f, binary.LittleEndian, k); err != nil {
-			return err
+	for _, v := range db.buf {
+		if v == h {
+			return true
 		}
 	}
-	if err := f.Close(); err != nil {
-		return err
+	return false
+}
+
+// Add inserts h into the database. Panics on read-only databases.
+func (db *HashDB) Add(h uint64) {
+	if db.readOnly {
+		panic("hashdb: cannot add to read-only database")
 	}
-	return os.Rename(f.Name(), path)
+	db.buf = append(db.buf, h)
+}
+
+// Merge adds all entries from other into this database.
+func (db *HashDB) Merge(other *HashDB) {
+	db.buf = append(db.buf, other.main...)
+	db.buf = append(db.buf, other.buf...)
+}
+
+// Compact sorts the buffer, merges it with main, and deduplicates.
+func (db *HashDB) Compact() {
+	if len(db.buf) == 0 {
+		return
+	}
+	all := make([]uint64, 0, len(db.main)+len(db.buf))
+	all = append(all, db.main...)
+	all = append(all, db.buf...)
+	sort.Slice(all, func(i, j int) bool { return all[i] < all[j] })
+	// Dedup in place
+	if len(all) > 0 {
+		j := 0
+		for i := 1; i < len(all); i++ {
+			if all[i] != all[j] {
+				j++
+				all[j] = all[i]
+			}
+		}
+		all = all[:j+1]
+	}
+	db.main = all
+	db.buf = nil
+}
+
+// Len returns the total number of entries (main + buffer, may include dupes).
+func (db *HashDB) Len() int {
+	return len(db.main) + len(db.buf)
 }

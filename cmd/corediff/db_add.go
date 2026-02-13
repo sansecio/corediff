@@ -27,7 +27,7 @@ func (a *dbAddArg) Execute(_ []string) error {
 		logLevel = 3
 	}
 
-	db, err := hashdb.Load(a.Database)
+	db, err := hashdb.OpenReadWrite(a.Database)
 	if os.IsNotExist(err) {
 		db = hashdb.New()
 		err = nil
@@ -36,22 +36,23 @@ func (a *dbAddArg) Execute(_ []string) error {
 		return err
 	}
 
-	oldSize := len(db)
+	oldSize := db.Len()
 	for _, p := range a.Path.Path {
 		fmt.Println("Calculating checksums for", p)
 		addPath(p, db, a.IgnorePaths, a.AllValidText)
 		fmt.Println()
 	}
 
-	if len(db) != oldSize {
-		fmt.Println("Computed", len(db)-oldSize, "new hashes, saving to", a.Database, "..")
-		return hashdb.Save(a.Database, db)
+	db.Compact()
+	if db.Len() != oldSize {
+		fmt.Println("Computed", db.Len()-oldSize, "new hashes, saving to", a.Database, "..")
+		return db.Save(a.Database)
 	}
 	fmt.Println("Found no new code hashes...")
 	return nil
 }
 
-func addPath(root string, db hashdb.HashDB, ignorePaths bool, allValidText bool) {
+func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool) {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		var relPath string
 		if path == root {

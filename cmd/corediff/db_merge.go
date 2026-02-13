@@ -14,22 +14,21 @@ type dbMergeArg struct {
 }
 
 func (m *dbMergeArg) Execute(_ []string) error {
-	out, err := hashdb.Load(m.Database)
+	out, err := hashdb.OpenReadWrite(m.Database)
 	if err != nil {
 		out = hashdb.New()
 	}
 
 	for _, p := range m.Path.Path {
-		db, err := hashdb.Load(p)
+		db, err := hashdb.OpenReadOnly(p)
 		if err != nil {
 			return fmt.Errorf("loading %s: %w", p, err)
 		}
-		fmt.Printf("Merging %s with %d entries ..\n", p, len(db))
-		for k := range db {
-			out.Add(k)
-		}
+		fmt.Printf("Merging %s with %d entries ..\n", p, db.Len())
+		out.Merge(db)
 	}
 
-	fmt.Printf("Saving %s with a total of %d entries.\n", m.Database, len(out))
-	return hashdb.Save(m.Database, out)
+	out.Compact()
+	fmt.Printf("Saving %s with a total of %d entries.\n", m.Database, out.Len())
+	return out.Save(m.Database)
 }

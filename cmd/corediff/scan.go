@@ -60,12 +60,12 @@ func (s *scanArg) Execute(_ []string) error {
 	}
 	s.validate()
 
-	db, err := hashdb.Load(s.Database)
+	db, err := hashdb.OpenReadOnly(s.Database)
 	if err != nil {
 		log.Fatal("Error loading database:", err)
 	}
 
-	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", len(db), " precomputed hashes. (C) 2023-2026 Willem de Groot"))
+	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", db.Len(), " precomputed hashes. (C) 2023-2026 Willem de Groot"))
 	fmt.Println("Using database:", s.Database)
 
 	without := "code"
@@ -162,7 +162,7 @@ func parseFH(r io.Reader, lineCB func([]byte)) error {
 	return scanner.Err()
 }
 
-func parseFileWithDB(path string, db hashdb.HashDB, updateDB bool) (hits []int, lines [][]byte) {
+func parseFileWithDB(path string, db *hashdb.HashDB, updateDB bool) (hits []int, lines [][]byte) {
 	c := 0
 	err := parseFile(path, func(line []byte) {
 		c++
@@ -181,7 +181,7 @@ func parseFileWithDB(path string, db hashdb.HashDB, updateDB bool) (hits []int, 
 	return hits, lines
 }
 
-func walkPath(root string, db hashdb.HashDB, args *scanArg) *walkStats {
+func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 	stats := &walkStats{}
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		var relPath string
