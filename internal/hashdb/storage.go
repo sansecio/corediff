@@ -31,7 +31,7 @@ func OpenReadOnly(path string) (db *HashDB, err error) {
 	}
 	size := fi.Size()
 	if size == 0 {
-		return &HashDB{readOnly: true}, nil
+		return &HashDB{set: map[uint64]struct{}{}, readOnly: true}, nil
 	}
 	if size < headerSize {
 		return nil, fmt.Errorf("file too small for CDDB header")
@@ -75,7 +75,12 @@ func OpenReadOnly(path string) (db *HashDB, err error) {
 		main = unsafe.Slice((*uint64)(unsafe.Pointer(&mmapData[headerSize])), count)
 	}
 
-	return &HashDB{main: main, readOnly: true, mmapData: mmapData}, nil
+	set := make(map[uint64]struct{}, count)
+	for _, h := range main {
+		set[h] = struct{}{}
+	}
+
+	return &HashDB{main: main, set: set, readOnly: true, mmapData: mmapData}, nil
 }
 
 // OpenReadWrite opens a hash database for querying and mutation.
@@ -85,7 +90,11 @@ func OpenReadWrite(path string) (*HashDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &HashDB{main: data}, nil
+	set := make(map[uint64]struct{}, len(data))
+	for _, h := range data {
+		set[h] = struct{}{}
+	}
+	return &HashDB{main: data, set: set}, nil
 }
 
 // Save writes the database to path atomically in the CDDB format.

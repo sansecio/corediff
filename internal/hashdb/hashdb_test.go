@@ -279,3 +279,75 @@ func BenchmarkContains(b *testing.B) {
 		db.Contains(uint64(i) * 31)
 	}
 }
+
+// BenchmarkContains20M_Slice benchmarks sorted-slice lookup with 20M entries.
+func BenchmarkContains20M_Slice(b *testing.B) {
+	const n = 20_000_000
+	rng := newSplitMix64(12345)
+
+	db := New()
+	keys := make([]uint64, n)
+	for i := range n {
+		keys[i] = rng.next()
+		db.Add(keys[i])
+	}
+	db.Compact()
+
+	// Build lookup keys: 50% hits, 50% misses
+	lookup := make([]uint64, n)
+	for i := range n {
+		if i%2 == 0 {
+			lookup[i] = keys[rng.next()%uint64(n)]
+		} else {
+			lookup[i] = rng.next()
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := range b.N {
+		db.Contains(lookup[i%n])
+	}
+}
+
+// BenchmarkContains20M_Map benchmarks map[uint64]struct{} lookup with 20M entries.
+func BenchmarkContains20M_Map(b *testing.B) {
+	const n = 20_000_000
+	rng := newSplitMix64(12345)
+
+	m := make(map[uint64]struct{}, n)
+	keys := make([]uint64, n)
+	for i := range n {
+		keys[i] = rng.next()
+		m[keys[i]] = struct{}{}
+	}
+
+	// Build lookup keys: 50% hits, 50% misses (same seed pattern as slice bench)
+	lookup := make([]uint64, n)
+	for i := range n {
+		if i%2 == 0 {
+			lookup[i] = keys[rng.next()%uint64(n)]
+		} else {
+			lookup[i] = rng.next()
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := range b.N {
+		_ = func() bool { _, ok := m[lookup[i%n]]; return ok }()
+	}
+}
+
+// splitMix64 is a simple, fast PRNG for deterministic benchmark data.
+type splitMix64 struct{ state uint64 }
+
+func newSplitMix64(seed uint64) splitMix64 { return splitMix64{state: seed} }
+
+func (s *splitMix64) next() uint64 {
+	s.state += 0x9e3779b97f4a7c15
+	z := s.state
+	z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+	z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+	return z ^ (z >> 31)
+}
