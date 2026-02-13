@@ -160,7 +160,21 @@ func parseFH(r io.Reader, lineCB func([]byte)) error {
 	return scanner.Err()
 }
 
-func parseFileWithDB(path string, db *hashdb.HashDB, updateDB bool) (hits []int, lines [][]byte) {
+// addFileHashes opens path and adds all line hashes to db using HashReader.
+// Returns the number of new hashes added.
+func addFileHashes(path string, db *hashdb.HashDB) int {
+	fh, err := os.Open(path)
+	if err != nil {
+		log.Println("err: ", err)
+		return 0
+	}
+	defer fh.Close()
+	return normalize.HashReader(fh, db, nil)
+}
+
+// scanFileWithDB scans path and returns line numbers and content of lines
+// whose hashes are not in db.
+func scanFileWithDB(path string, db *hashdb.HashDB) (hits []int, lines [][]byte) {
 	c := 0
 	err := parseFile(path, func(line []byte) {
 		c++
@@ -168,18 +182,12 @@ func parseFileWithDB(path string, db *hashdb.HashDB, updateDB bool) (hits []int,
 		if len(hashes) == 0 {
 			return // empty/comment line
 		}
-		anyMissing := false
 		for _, h := range hashes {
 			if !db.Contains(h) {
-				anyMissing = true
-				if updateDB {
-					db.Add(h)
-				}
+				hits = append(hits, c)
+				lines = append(lines, line)
+				return
 			}
-		}
-		if anyMissing {
-			hits = append(hits, c)
-			lines = append(lines, line)
 		}
 	})
 	if err != nil {
@@ -228,7 +236,7 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 			}
 		}
 
-		hits, lines := parseFileWithDB(path, db, false)
+		hits, lines := scanFileWithDB(path, db)
 
 		if args.SuspectOnly {
 			hitsFiltered := []int{}

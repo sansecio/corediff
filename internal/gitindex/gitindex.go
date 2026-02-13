@@ -29,7 +29,7 @@ type IndexOptions struct {
 // CloneAndIndex bare-clones repoURL, then for each version→ref pair,
 // walks the git tree and hashes all eligible files into db.
 func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) error {
-	opts.installHTTPTransport()
+	opts.InstallHTTPTransport()
 
 	tmpDir, err := os.MkdirTemp("", "corediff-git-*")
 	if err != nil {
@@ -56,7 +56,7 @@ func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, op
 // CloneAndIndexWithDir is like CloneAndIndex but uses an existing directory
 // for the bare clone. If the directory already contains a valid repo, it reuses it.
 func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) error {
-	opts.installHTTPTransport()
+	opts.InstallHTTPTransport()
 
 	var repo *git.Repository
 	var err error
@@ -97,7 +97,7 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 		return fmt.Errorf("getting tree: %w", err)
 	}
 
-	fmt.Printf("  indexing %s (%s)\n", version, ref[:minLen(ref, 12)])
+	opts.logf("  indexing %s (%s)", version, ref[:minLen(ref, 12)])
 
 	return tree.Files().ForEach(func(f *object.File) error {
 		return indexFile(f, db, opts)
@@ -117,10 +117,10 @@ func (opts IndexOptions) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
-// installHTTPTransport registers a custom HTTP client with go-git's protocol
-// handlers so clone/fetch requests are logged. This is global state, so it
-// should only be called once before git operations.
-func (opts IndexOptions) installHTTPTransport() {
+// InstallHTTPTransport registers a custom HTTP client with go-git's protocol
+// handlers so clone/fetch requests use the provided client. This modifies
+// global state and must be called once before any concurrent git operations.
+func (opts IndexOptions) InstallHTTPTransport() {
 	if opts.HTTP == nil {
 		return
 	}

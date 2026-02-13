@@ -7,11 +7,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_parseFile(t *testing.T) {
+func Test_addFileHashes(t *testing.T) {
 	hdb := hashdb.New()
-	updateDB := true
-	hits, lines := parseFileWithDB("../../fixture/docroot/odd-encoding.js", hdb, updateDB)
+	n := addFileHashes("../../fixture/docroot/odd-encoding.js", hdb)
 	assert.Equal(t, 219, hdb.Len())
-	assert.Equal(t, 219, len(hits))
-	assert.Equal(t, 219, len(lines))
+	assert.Equal(t, 219, n)
+}
+
+func Test_scanFileWithDB(t *testing.T) {
+	// First populate the DB
+	hdb := hashdb.New()
+	addFileHashes("../../fixture/docroot/odd-encoding.js", hdb)
+
+	// Scanning the same file should find zero unrecognized lines
+	hits, lines := scanFileWithDB("../../fixture/docroot/odd-encoding.js", hdb)
+	assert.Equal(t, 0, len(hits))
+	assert.Equal(t, 0, len(lines))
 }

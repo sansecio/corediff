@@ -1,11 +1,13 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/gwillem/corediff/internal/gitindex"
 	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/gwillem/corediff/internal/normalize"
 	"github.com/stretchr/testify/assert"
@@ -101,20 +103,71 @@ func TestDBAdd_PackagistValidation(t *testing.T) {
 	dbPath := filepath.Join(tmp, "test.db")
 	dbCommand.Database = dbPath
 
-	t.Run("mutual exclusion", func(t *testing.T) {
+	t.Run("packagist+path", func(t *testing.T) {
 		arg := dbAddArg{Packagist: "vendor/pkg"}
 		arg.Path.Path = []string{"/some/path"}
 		err := arg.Execute(nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot use --packagist and <path> together")
+		assert.Contains(t, err.Error(), "cannot combine")
+	})
+
+	t.Run("composer+packagist", func(t *testing.T) {
+		arg := dbAddArg{Packagist: "vendor/pkg", Composer: "/some/composer.json"}
+		err := arg.Execute(nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot combine")
+	})
+
+	t.Run("composer+path", func(t *testing.T) {
+		arg := dbAddArg{Composer: "/some/composer.json"}
+		arg.Path.Path = []string{"/some/path"}
+		err := arg.Execute(nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot combine")
 	})
 
 	t.Run("neither provided", func(t *testing.T) {
 		arg := dbAddArg{}
 		err := arg.Execute(nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "provide --packagist or at least one <path>")
+		assert.Contains(t, err.Error(), "provide --packagist, --composer, or at least one <path>")
 	})
+
+	t.Run("composer missing file", func(t *testing.T) {
+		arg := dbAddArg{Composer: filepath.Join(tmp, "nonexistent.json")}
+		err := arg.Execute(nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "composer.json")
+	})
+}
+
+func TestBuildHTTPClient_AppliesAuth(t *testing.T) {
+	// Set up auth.json in a temp dir so FindAuthConfig finds it
+	tmp := t.TempDir()
+	composerDir := filepath.Join(tmp, ".composer")
+	require.NoError(t, os.MkdirAll(composerDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(composerDir, "auth.json"), []byte(`{
+		"http-basic": {"repo.magento.com": {"username": "user", "password": "pass"}}
+	}`), 0o644))
+
+	// Run from the temp dir so FindAuthConfig walks up and finds it
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	arg := dbAddArg{}
+	opts := gitindex.IndexOptions{}
+	client, err := arg.buildHTTPClient(&opts)
+	require.NoError(t, err)
+	require.NotNil(t, client, "buildHTTPClient should return non-nil client when auth is found")
+	assert.Same(t, client, opts.HTTP, "opts.HTTP should be set to the returned client")
+
+	// Verify auth header is applied for repo.magento.com
+	req, _ := http.NewRequest("GET", "https://repo.magento.com/archives/test.zip", nil)
+	client.Transport.RoundTrip(req) //nolint: we just want to check the header mutation
+	assert.NotEmpty(t, req.Header.Get("Authorization"), "auth header should be set for repo.magento.com")
+	assert.Contains(t, req.Header.Get("Authorization"), "Basic ")
 }
 
 func TestDBAdd_ParsePackagistVersion(t *testing.T) {
