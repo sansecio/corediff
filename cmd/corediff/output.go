@@ -17,7 +17,7 @@ var (
 	logLevel = 1
 )
 
-func logVerbose(a ...interface{}) {
+func logVerbose(a ...any) {
 	if logLevel >= 3 {
 		fmt.Println(a...)
 	}

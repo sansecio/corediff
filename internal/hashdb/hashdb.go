@@ -1,4 +1,4 @@
-package main
+package hashdb
 
 import (
 	"bufio"
@@ -9,26 +9,37 @@ import (
 	"path/filepath"
 )
 
-var placeholder = struct{}{}
+// HashDB stores precomputed hashes for fast lookup.
+type HashDB map[uint64]struct{}
 
-func newDB() hashDB {
-	return make(hashDB, 1024*1024)
+// New creates an empty HashDB with pre-allocated capacity.
+func New() HashDB {
+	return make(HashDB, 1024*1024)
 }
 
-func loadDB(path string) (hashDB, error) {
-	// get file size of path to pre allocate proper map size
+// Contains reports whether h is in the database.
+func (db HashDB) Contains(h uint64) bool {
+	_, ok := db[h]
+	return ok
+}
+
+// Add inserts h into the database.
+func (db HashDB) Add(h uint64) {
+	db[h] = struct{}{}
+}
+
+// Load reads a hash database from a binary file of little-endian uint64 values.
+func Load(path string) (HashDB, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
 	size := fi.Size()
-	// fatal if not multiple of 8
 	if size%8 != 0 {
-		return nil, fmt.Errorf("Invalid database size, corrupt?")
+		return nil, fmt.Errorf("invalid database size, corrupt?")
 	}
 
-	// create a map of size
-	m := make(hashDB, size/8)
+	m := make(HashDB, size/8)
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return m, nil
@@ -36,6 +47,7 @@ func loadDB(path string) (hashDB, error) {
 		return nil, err
 	}
 	defer f.Close()
+
 	reader := bufio.NewReader(f)
 	var b uint64
 	for {
@@ -45,19 +57,20 @@ func loadDB(path string) (hashDB, error) {
 		} else if err != nil {
 			return nil, err
 		}
-		m[b] = placeholder
+		m[b] = struct{}{}
 	}
 	return m, nil
 }
 
-func saveDB(path string, db hashDB) error {
+// Save writes the hash database to a binary file atomically.
+func Save(path string, db HashDB) error {
 	f, err := os.CreateTemp(filepath.Dir(path), "corediff_temp_db")
 	if err != nil {
 		return err
 	}
-	// defer executed in reverse order
 	defer os.Remove(f.Name())
 	defer f.Close()
+
 	for k := range db {
 		if err := binary.Write(f, binary.LittleEndian, k); err != nil {
 			return err
@@ -66,8 +79,5 @@ func saveDB(path string, db hashDB) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(f.Name(), path); err != nil {
-		return err
-	}
-	return nil
+	return os.Rename(f.Name(), path)
 }

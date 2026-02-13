@@ -6,7 +6,7 @@ import (
 	"github.com/jessevdk/go-flags"
 )
 
-const defaultcmd = "scan"
+const defaultCmd = "scan"
 
 type globalOpt struct {
 	Verbose []bool `short:"v" long:"verbose" description:"Show verbose debug information"`
@@ -18,22 +18,19 @@ var (
 )
 
 func main() {
-	ensureDefaultCommand(cli, defaultcmd)
+	ensureDefaultCommand(cli, defaultCmd)
 	cli.SubcommandsOptional = false
 	_, _ = cli.Parse()
 }
 
-func ensureDefaultCommand(p *flags.Parser, defaultCmd string) {
+func ensureDefaultCommand(p *flags.Parser, cmd string) {
 	if len(os.Args) < 2 {
-		// os.Args = append(os.Args, defaultCmd)
 		return
 	}
-
 	for _, c := range p.Commands() {
 		if c.Name == os.Args[1] {
 			return
 		}
 	}
-
-	os.Args = append([]string{os.Args[0], defaultCmd}, os.Args[1:]...)
+	os.Args = append([]string{os.Args[0], cmd}, os.Args[1:]...)
 }

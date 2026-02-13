@@ -1,4 +1,4 @@
-package main
+package highlight
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	highlightPatternsReg = compileRegexps([]string{
+	patternsReg = compileRegexps([]string{
 		// php
 		`\$_[A-Z]`,       // $_GET, $_POST, etc.
 		`\S"\s*\.\s*"\S`, // " . "
@@ -22,7 +22,8 @@ var (
 		`(\\x[A-Z0-9]{2}){15,}`,  // long hex string
 		`(_0x\w{4,8}.+){4,}`,     // multiple obfuscated variables
 	})
-	highlightPatternsLit = [][]byte{
+
+	patternsLit = [][]byte{
 		// php
 		[]byte(`system(`),
 		[]byte(`fopen(`),
@@ -102,17 +103,17 @@ func compileRegexps(patterns []string) []*regexp.Regexp {
 	return rxs
 }
 
-func shouldHighlight(b []byte) bool {
-	for _, p := range highlightPatternsLit {
+// ShouldHighlight reports whether a line contains suspect patterns.
+func ShouldHighlight(b []byte) bool {
+	for _, p := range patternsLit {
 		if bytes.Contains(b, p) {
 			return true
 		}
 	}
-	for _, rx := range highlightPatternsReg {
+	for _, rx := range patternsReg {
 		if rx.Match(b) {
 			return true
 		}
 	}
-
 	return false
 }
