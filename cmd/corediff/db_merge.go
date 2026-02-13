@@ -19,17 +19,20 @@ func (m *dbMergeArg) Execute(_ []string) error {
 		out = hashdb.New()
 	}
 
+	totalInput := out.Len()
 	for _, p := range m.Path.Path {
 		db, err := hashdb.OpenReadOnly(p)
 		if err != nil {
 			return fmt.Errorf("loading %s: %w", p, err)
 		}
 		fmt.Printf("Merging %s with %d entries ..\n", p, db.Len())
+		totalInput += db.Len()
 		out.Merge(db)
 		db.Close()
 	}
 
 	out.Compact()
-	fmt.Printf("Saving %s with a total of %d entries.\n", m.Database, out.Len())
+	dupes := totalInput - out.Len()
+	fmt.Printf("Saving %s with %d entries (%d duplicates removed).\n", m.Database, out.Len(), dupes)
 	return out.Save(m.Database)
 }

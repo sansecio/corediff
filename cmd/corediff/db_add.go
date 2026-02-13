@@ -36,10 +36,21 @@ func (a *dbAddArg) Execute(_ []string) error {
 		return err
 	}
 
+	for _, p := range a.Path.Path {
+		// Validate app root for directories unless --no-platform
+		fi, fiErr := os.Stat(p)
+		if fiErr != nil {
+			return fmt.Errorf("error stat'ing %q: %w", p, fiErr)
+		}
+		if fi.IsDir() && !a.NoPlatform && !a.IgnorePaths && !cdpath.IsAppRoot(p) {
+			return fmt.Errorf("path %q does not seem to be an application root path. Try again with proper root path, or use --no-platform", p)
+		}
+	}
+
 	oldSize := db.Len()
 	for _, p := range a.Path.Path {
 		fmt.Println("Calculating checksums for", p)
-		addPath(p, db, a.IgnorePaths, a.AllValidText)
+		addPath(p, db, a.IgnorePaths, a.AllValidText, a.NoPlatform)
 		fmt.Println()
 	}
 
@@ -52,7 +63,7 @@ func (a *dbAddArg) Execute(_ []string) error {
 	return nil
 }
 
-func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool) {
+func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool, noPlatform bool) {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		var relPath string
 		if path == root {
@@ -77,7 +88,7 @@ func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool
 			return nil
 		}
 
-		if !ignorePaths && path != root && !cdpath.IsExcluded(relPath) {
+		if !ignorePaths && !noPlatform && path != root && !cdpath.IsExcluded(relPath) {
 			db.Add(normalize.PathHash(relPath))
 		}
 

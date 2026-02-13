@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cespare/xxhash/v2"
+	"github.com/gwillem/corediff/internal/chunker"
 )
 
 var (
@@ -46,6 +47,21 @@ func Line(b []byte) []byte {
 // Hash returns the xxhash64 of b.
 func Hash(b []byte) uint64 {
 	return xxhash.Sum64(b)
+}
+
+// HashLine normalizes a line, then chunks it if it's long (minified code).
+// Returns one or more hashes. Empty/comment lines return nil.
+func HashLine(raw []byte) []uint64 {
+	norm := Line(raw)
+	if len(norm) == 0 {
+		return nil
+	}
+	chunks := chunker.ChunkLine(norm)
+	hashes := make([]uint64, len(chunks))
+	for i, c := range chunks {
+		hashes[i] = Hash(c)
+	}
+	return hashes
 }
 
 // PathHash returns the hash for a path entry (prefixed with "path:").

@@ -145,7 +145,7 @@ func (s *scanArg) validate() error {
 func parseFile(path string, lineCB func([]byte)) error {
 	fh, err := os.Open(path)
 	if err != nil && os.IsNotExist(err) {
-		return fmt.Errorf("file does not exist: " + path)
+		return fmt.Errorf("file does not exist: %s", path)
 	} else if err != nil {
 		return fmt.Errorf("open error on %s: %s", path, err)
 	}
@@ -167,13 +167,22 @@ func parseFileWithDB(path string, db *hashdb.HashDB, updateDB bool) (hits []int,
 	c := 0
 	err := parseFile(path, func(line []byte) {
 		c++
-		h := normalize.Hash(normalize.Line(line))
-		if !db.Contains(h) {
+		hashes := normalize.HashLine(line)
+		if len(hashes) == 0 {
+			return // empty/comment line
+		}
+		anyMissing := false
+		for _, h := range hashes {
+			if !db.Contains(h) {
+				anyMissing = true
+				if updateDB {
+					db.Add(h)
+				}
+			}
+		}
+		if anyMissing {
 			hits = append(hits, c)
 			lines = append(lines, line)
-			if updateDB {
-				db.Add(h)
-			}
 		}
 	})
 	if err != nil {
