@@ -9,7 +9,7 @@ import (
 const defaultCmd = "scan"
 
 type globalOpt struct {
-	Verbose []bool `short:"v" long:"verbose" description:"Show verbose debug information"`
+	Verbose []bool `short:"v" long:"verbose" description:"Verbose output (-v info, -vv per-file details)"`
 }
 
 var (

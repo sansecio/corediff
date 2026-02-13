@@ -38,7 +38,6 @@ type scanArg struct {
 	SuspectOnly  bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
 	AllValidText bool   `short:"t" long:"text" description:"Scan all valid UTF-8 text files, instead of just files with valid prefixes."`
 	NoPlatform   bool   `long:"no-platform" description:"Don't check for app root when adding hashes. Do add file paths."`
-	Verbose      bool   `short:"v" long:"verbose" description:"Show what is going on"`
 	PathFilter   string `short:"f" long:"path-filter" description:"Applies a path filter prior to diffing (e.g. vendor/magento)"`
 }
 
@@ -101,9 +100,7 @@ func (stats *walkStats) percentage(of int) float64 {
 
 func (s *scanArg) validate() error {
 	var err error
-	if s.Verbose {
-		logLevel = 3
-	}
+	applyVerbose()
 
 	if s.Database == "" {
 		s.Database = urlfilecache.ToPath(defaultHashDBURL)
@@ -264,7 +261,7 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 			fmt.Println()
 		} else {
 			stats.filesWithoutChanges++
-			if args.Verbose {
+			if len(globalOpts.Verbose) >= 1 {
 				stats.undetectedPaths = append(stats.undetectedPaths, path)
 			}
 			logVerbose(green(" V " + relPath))

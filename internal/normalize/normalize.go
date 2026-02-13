@@ -1,8 +1,10 @@
 package normalize
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/gwillem/corediff/internal/chunker"
+	"github.com/gwillem/corediff/internal/hashdb"
 )
 
 var (
@@ -78,6 +81,33 @@ func HasValidExt(path string) bool {
 		}
 	}
 	return false
+}
+
+const maxTokenSize = 1024 * 1024 * 10 // 10 MB
+
+// HashReader scans lines from r, normalizes and hashes each line,
+// and adds new hashes to db. Returns the count of new hashes added.
+// If logf is non-nil, each hash is logged as "HASH line".
+func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any)) int {
+	scanner := bufio.NewScanner(r)
+	buf := make([]byte, maxTokenSize)
+	scanner.Buffer(buf, maxTokenSize)
+
+	added := 0
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		hashes := HashLine(line)
+		for _, h := range hashes {
+			if !db.Contains(h) {
+				db.Add(h)
+				added++
+			}
+			if logf != nil {
+				logf("      %016x %s", h, line)
+			}
+		}
+	}
+	return added
 }
 
 // IsValidUtf8 checks if the first 8KB of a file is valid UTF-8.

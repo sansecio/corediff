@@ -1,0 +1,55 @@
+{
+  "minified": "composer/2.0",
+  "packages": {
+    "psr/log": [
+      {
+        "name": "psr/log",
+        "description": "Common interface for logging libraries",
+        "version": "3.0.2",
+        "version_normalized": "3.0.2.0",
+        "source": {
+          "url": "https://github.com/php-fig/log.git",
+          "type": "git",
+          "reference": "f16e1d5863e37f8d8c2a01719f5b34baa2b714d3"
+        },
+        "dist": {
+          "url": "https://api.github.com/repos/php-fig/log/zipball/f16e1d5863e37f8d8c2a01719f5b34baa2b714d3",
+          "type": "zip",
+          "reference": "f16e1d5863e37f8d8c2a01719f5b34baa2b714d3"
+        }
+      },
+      {
+        "name": "psr/log",
+        "description": "Common interface for logging libraries",
+        "version": "3.0.1",
+        "version_normalized": "3.0.1.0",
+        "source": {
+          "url": "https://github.com/php-fig/log.git",
+          "type": "git",
+          "reference": "79dff0b268932c640297f5208d6298f71855c03e"
+        },
+        "dist": {
+          "url": "https://api.github.com/repos/php-fig/log/zipball/79dff0b268932c640297f5208d6298f71855c03e",
+          "type": "zip",
+          "reference": "79dff0b268932c640297f5208d6298f71855c03e"
+        }
+      },
+      {
+        "name": "psr/log",
+        "description": "Common interface for logging libraries",
+        "version": "1.1.4",
+        "version_normalized": "1.1.4.0",
+        "source": {
+          "url": "https://github.com/php-fig/log.git",
+          "type": "git",
+          "reference": "d49695b909c3b7628b6289db5479a1c204601f11"
+        },
+        "dist": {
+          "url": "https://api.github.com/repos/php-fig/log/zipball/d49695b909c3b7628b6289db5479a1c204601f11",
+          "type": "zip",
+          "reference": "d49695b909c3b7628b6289db5479a1c204601f11"
+        }
+      }
+    ]
+  }
+}

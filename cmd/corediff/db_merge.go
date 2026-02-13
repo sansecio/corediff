@@ -7,14 +7,14 @@ import (
 )
 
 type dbMergeArg struct {
-	Database string `short:"d" long:"database" description:"Output database path" required:"true"`
-	Path     struct {
+	Path struct {
 		Path []string `positional-arg-name:"<db-file>" required:"1"`
 	} `positional-args:"yes" required:"true"`
 }
 
 func (m *dbMergeArg) Execute(_ []string) error {
-	out, err := hashdb.OpenReadWrite(m.Database)
+	dbPath := dbCommand.Database
+	out, err := hashdb.OpenReadWrite(dbPath)
 	if err != nil {
 		out = hashdb.New()
 	}
@@ -33,6 +33,6 @@ func (m *dbMergeArg) Execute(_ []string) error {
 
 	out.Compact()
 	dupes := totalInput - out.Len()
-	fmt.Printf("Saving %s with %d entries (%d duplicates removed).\n", m.Database, out.Len(), dupes)
-	return out.Save(m.Database)
+	fmt.Printf("Saving %s with %d entries (%d duplicates removed).\n", dbPath, out.Len(), dupes)
+	return out.Save(dbPath)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gwillem/corediff/internal/hashdb"
@@ -63,7 +64,8 @@ func TestDBMerge(t *testing.T) {
 	require.NoError(t, db2.Save(db2Path))
 
 	// Merge
-	mergeArg := dbMergeArg{Database: outPath}
+	dbCommand.Database = outPath
+	mergeArg := dbMergeArg{}
 	mergeArg.Path.Path = []string{db1Path, db2Path}
 	require.NoError(t, mergeArg.Execute(nil))
 
@@ -94,6 +96,68 @@ func TestDBSaveAndReopen(t *testing.T) {
 	assert.Greater(t, loaded.Len(), 0)
 }
 
+func TestDBAdd_PackagistValidation(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "test.db")
+	dbCommand.Database = dbPath
+
+	t.Run("mutual exclusion", func(t *testing.T) {
+		arg := dbAddArg{Packagist: "vendor/pkg"}
+		arg.Path.Path = []string{"/some/path"}
+		err := arg.Execute(nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot use --packagist and <path> together")
+	})
+
+	t.Run("neither provided", func(t *testing.T) {
+		arg := dbAddArg{}
+		err := arg.Execute(nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "provide --packagist or at least one <path>")
+	})
+}
+
+func TestDBAdd_ParsePackagistVersion(t *testing.T) {
+	tests := []struct {
+		input   string
+		wantPkg string
+		wantPin string
+	}{
+		{"psr/log", "psr/log", ""},
+		{"psr/log:3.0.0", "psr/log", "3.0.0"},
+		{"psr/log@3.0.0", "psr/log", "3.0.0"},
+		{"magento/framework:103.0.7-p3", "magento/framework", "103.0.7-p3"},
+		{"magento/framework@103.0.7-p3", "magento/framework", "103.0.7-p3"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			pkg := tt.input
+			var pin string
+			if idx := strings.LastIndexAny(pkg, ":@"); idx > 0 {
+				pkg, pin = pkg[:idx], pkg[idx+1:]
+			}
+			assert.Equal(t, tt.wantPkg, pkg)
+			assert.Equal(t, tt.wantPin, pin)
+		})
+	}
+}
+
+func TestDBAdd_DatabaseOnParent(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "test.db")
+	dbCommand.Database = dbPath
+
+	arg := dbAddArg{NoPlatform: true}
+	arg.Path.Path = []string{"../../fixture/docroot"}
+	require.NoError(t, arg.Execute(nil))
+
+	// Verify database was created using parent's Database path
+	db, err := hashdb.OpenReadOnly(dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+	assert.Greater(t, db.Len(), 0)
+}
+
 func TestDBInfo(t *testing.T) {
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "test.db")
@@ -106,8 +170,8 @@ func TestDBInfo(t *testing.T) {
 	require.NoError(t, db.Save(dbPath))
 
 	// Verify info command doesn't error
+	dbCommand.Database = dbPath
 	infoArg := dbInfoArg{}
-	infoArg.Path.Path = dbPath
 	require.NoError(t, infoArg.Execute(nil))
 
 	// Verify the file has correct size: 16 header + 3*8 data = 40
