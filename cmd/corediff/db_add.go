@@ -569,8 +569,10 @@ func (a *dbAddArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest
 			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
 		}
 	}
+	subPkgSet := make(map[string]struct{})
 	pkgOpts.OnSubPackage = func(name, version string) {
 		if version != "" {
+			subPkgSet[name+"@"+version] = struct{}{}
 			if err := mf.MarkIndexed(name, version); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
 			}
@@ -581,6 +583,10 @@ func (a *dbAddArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: indexing %s: %v\n", url, err)
 		return
+	}
+
+	if len(subPkgSet) > 0 {
+		fmt.Printf("Indexed %d embedded packages\n", len(subPkgSet))
 	}
 
 	// Also write replaces found across all indexed versions (may overlap with HEAD).
