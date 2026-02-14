@@ -191,6 +191,72 @@ func ParseName(data []byte) string {
 	return raw.Name
 }
 
+// FindConfigRepos searches for a Composer config.json and returns any
+// composer-type repositories defined in it. Searches from cwd upward,
+// then falls back to $HOME/.composer/config.json.
+// Returns (nil, nil) if no config.json is found.
+func FindConfigRepos() ([]Repository, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
+	}
+
+	repos, err := findConfigReposFrom(cwd, "/")
+	if err != nil || repos != nil {
+		return repos, err
+	}
+
+	if home != "" {
+		return tryLoadConfigRepos(filepath.Join(home, ".composer", "config.json"))
+	}
+	return nil, nil
+}
+
+func findConfigReposFrom(startDir, stopDir string) ([]Repository, error) {
+	dir := startDir
+	for {
+		repos, err := tryLoadConfigRepos(filepath.Join(dir, ".composer", "config.json"))
+		if err != nil {
+			return nil, err
+		}
+		if repos != nil {
+			return repos, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		if dir == stopDir {
+			break
+		}
+		dir = parent
+	}
+	return nil, nil
+}
+
+func tryLoadConfigRepos(path string) ([]Repository, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	repos, err := parseRepos(data)
+	if err != nil {
+		return nil, err
+	}
+	if len(repos) == 0 {
+		return nil, nil
+	}
+	return repos, nil
+}
+
 // isPlatformPackage returns true for "php" and "ext-*" entries.
 func isPlatformPackage(name string) bool {
 	return name == "php" || strings.HasPrefix(name, "ext-")

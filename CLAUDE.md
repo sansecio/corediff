@@ -5,7 +5,9 @@ Forensic tool to detect unauthorized code modifications in open-source codebases
 ## Project structure
 
 - `cmd/` — All Go source: CLI entry point, scanning, database I/O, highlighting, path utils
+- `internal/` — Internal packages (hashdb, normalize, gitindex, composer, manifest, etc.)
 - `db/` — Pre-computed Magento version hash databases (.db files)
+- `doc/` — Architecture documentation and design docs
 - `fixture/` — Test fixtures (sample docroot, sample/empty databases)
 - `build/` — Pre-built binaries (darwin/linux, amd64/arm64)
 

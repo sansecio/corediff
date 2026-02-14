@@ -272,6 +272,62 @@ func TestParseName(t *testing.T) {
 	}
 }
 
+func TestFindConfigReposFromParent(t *testing.T) {
+	root := t.TempDir()
+	composerDir := filepath.Join(root, ".composer")
+	require.NoError(t, os.MkdirAll(composerDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(composerDir, "config.json"), []byte(`{
+		"repositories": [
+			{"type": "composer", "url": "https://repo.magento.com/"},
+			{"type": "vcs", "url": "https://github.com/foo/bar"}
+		]
+	}`), 0o644))
+
+	subDir := filepath.Join(root, "sub", "deep")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	repos, err := findConfigReposFrom(subDir, root)
+	require.NoError(t, err)
+	require.Len(t, repos, 1) // only composer-type
+	assert.Equal(t, "https://repo.magento.com", repos[0].URL)
+}
+
+func TestFindConfigReposNotFound(t *testing.T) {
+	root := t.TempDir()
+	repos, err := findConfigReposFrom(root, root)
+	require.NoError(t, err)
+	assert.Nil(t, repos)
+}
+
+func TestFindConfigReposInCwd(t *testing.T) {
+	root := t.TempDir()
+	composerDir := filepath.Join(root, ".composer")
+	require.NoError(t, os.MkdirAll(composerDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(composerDir, "config.json"), []byte(`{
+		"repositories": [
+			{"type": "composer", "url": "https://repo.magento.com"}
+		]
+	}`), 0o644))
+
+	repos, err := findConfigReposFrom(root, root)
+	require.NoError(t, err)
+	require.Len(t, repos, 1)
+	assert.Equal(t, "https://repo.magento.com", repos[0].URL)
+}
+
+func TestFindConfigReposEmptyRepos(t *testing.T) {
+	root := t.TempDir()
+	composerDir := filepath.Join(root, ".composer")
+	require.NoError(t, os.MkdirAll(composerDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(composerDir, "config.json"), []byte(`{
+		"config": {"preferred-install": "dist"}
+	}`), 0o644))
+
+	repos, err := findConfigReposFrom(root, root)
+	require.NoError(t, err)
+	assert.Nil(t, repos)
+}
+
 func TestNormalizeRepoURL(t *testing.T) {
 	tests := []struct {
 		input string

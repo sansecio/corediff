@@ -6,9 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/gwillem/corediff/internal/gitindex"
 	"github.com/gwillem/corediff/internal/hashdb"
+	"github.com/gwillem/corediff/internal/manifest"
 	"github.com/gwillem/corediff/internal/normalize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -231,6 +235,58 @@ func TestIsGitURL(t *testing.T) {
 			assert.Equal(t, tt.want, isGitURL(tt.input))
 		})
 	}
+}
+
+func TestUpdateGitURLEntry(t *testing.T) {
+	// Create a git repo with two version tags
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// v1.0.0
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.php"), []byte("<?php\necho 'v1';\n"), 0o644))
+	_, err = wt.Add("index.php")
+	require.NoError(t, err)
+	h1, err := wt.Commit("v1", &git.CommitOptions{
+		Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()},
+	})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v1.0.0", h1, nil)
+	require.NoError(t, err)
+
+	// v2.0.0
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.php"), []byte("<?php\necho 'v2';\n"), 0o644))
+	_, err = wt.Add("index.php")
+	require.NoError(t, err)
+	h2, err := wt.Commit("v2", &git.CommitOptions{
+		Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()},
+	})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v2.0.0", h2, nil)
+	require.NoError(t, err)
+
+	// Set up manifest with v1.0.0 already indexed
+	tmp := t.TempDir()
+	mfPath := filepath.Join(tmp, "test.manifest")
+	require.NoError(t, os.WriteFile(mfPath, []byte(dir+"@v1.0.0\n"), 0o644))
+
+	mf, err := manifest.Load(mfPath)
+	require.NoError(t, err)
+	defer mf.Close()
+
+	db := hashdb.New()
+	opts := gitindex.IndexOptions{NoPlatform: true}
+
+	arg := &dbAddArg{NoPlatform: true}
+	arg.updateGitURLEntry(dir, db, mf, opts)
+
+	// Should have indexed v2.0.0 but not re-indexed v1.0.0
+	assert.True(t, mf.IsIndexed(dir, "v2.0.0"))
+	assert.True(t, mf.IsIndexed(dir, "v1.0.0"))
+	assert.Greater(t, db.Len(), 0)
 }
 
 func TestDBInfo(t *testing.T) {
