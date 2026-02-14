@@ -84,6 +84,76 @@ func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *
 	return replaces, nil
 }
 
+// RefsFromTags clones (or opens) a git repo and returns a map of
+// version→commit-hash derived from semver-like tags.
+func RefsFromTags(repoURL, cloneDir string, opts IndexOptions) (*git.Repository, map[string]string, error) {
+	opts.InstallHTTPTransport()
+
+	var repo *git.Repository
+	var err error
+
+	repo, err = git.PlainOpen(cloneDir)
+	if err != nil {
+		repo, err = git.PlainClone(cloneDir, true, &git.CloneOptions{
+			URL: repoURL,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("cloning %s: %w", repoURL, err)
+		}
+	} else {
+		err = repo.Fetch(&git.FetchOptions{RemoteName: "origin"})
+		if err != nil && err != git.NoErrAlreadyUpToDate {
+			return nil, nil, fmt.Errorf("fetching %s: %w", repoURL, err)
+		}
+	}
+
+	tags, err := repo.Tags()
+	if err != nil {
+		return nil, nil, fmt.Errorf("listing tags: %w", err)
+	}
+
+	refs := make(map[string]string)
+	err = tags.ForEach(func(ref *plumbing.Reference) error {
+		name := ref.Name().Short()
+		if !isVersionTag(name) {
+			return nil
+		}
+
+		// Resolve annotated tags to the underlying commit
+		hash := ref.Hash()
+		if tagObj, tErr := repo.TagObject(hash); tErr == nil {
+			// Annotated tag — follow to commit
+			commit, cErr := tagObj.Commit()
+			if cErr == nil {
+				hash = commit.Hash
+			}
+		}
+
+		refs[name] = hash.String()
+		return nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("iterating tags: %w", err)
+	}
+
+	return repo, refs, nil
+}
+
+// IndexRepo indexes an already-opened repo with the given refs.
+func IndexRepo(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) ([]string, error) {
+	return indexRefs(repo, refs, db, opts), nil
+}
+
+// isVersionTag returns true if the tag name looks like a semver version:
+// starts with an optional "v" followed by a digit.
+func isVersionTag(name string) bool {
+	s := strings.TrimPrefix(name, "v")
+	if s == "" {
+		return false
+	}
+	return s[0] >= '0' && s[0] <= '9'
+}
+
 func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) []string {
 	versions := slices.Collect(maps.Keys(refs))
 	slices.SortFunc(versions, cmpVersionDesc)

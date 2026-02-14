@@ -211,6 +211,28 @@ func TestDBAdd_DatabaseOnParent(t *testing.T) {
 	assert.Greater(t, db.Len(), 0)
 }
 
+func TestIsGitURL(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"https://github.com/magento/magento2.git", true},
+		{"http://github.com/magento/magento2.git", true},
+		{"git://github.com/magento/magento2.git", true},
+		{"git@github.com:magento/magento2.git", true},
+		{"ssh://git@github.com/magento/magento2.git", true},
+		{"/some/local/path", false},
+		{"./relative/path", false},
+		{"relative/path", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.want, isGitURL(tt.input))
+		})
+	}
+}
+
 func TestDBInfo(t *testing.T) {
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "test.db")

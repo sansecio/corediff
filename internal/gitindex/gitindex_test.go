@@ -371,6 +371,155 @@ func TestCloneAndIndex_NoComposerJson(t *testing.T) {
 	assert.Empty(t, replaces)
 }
 
+func TestIsVersionTag(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"2.4.7", true},
+		{"v1.0.0", true},
+		{"v1.0.0-beta1", true},
+		{"0.1.0", true},
+		{"v2.4.7-p3", true},
+		{"1.0", true},
+		{"latest", false},
+		{"release-2024", false},
+		{"stable", false},
+		{"", false},
+		{"v", false},
+		{"abc", false},
+		{"nightly-20240101", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isVersionTag(tt.name), "isVersionTag(%q)", tt.name)
+		})
+	}
+}
+
+func TestRefsFromTags(t *testing.T) {
+	// Create a bare repo with lightweight tags
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// Create a file and commit
+	require.NoError(t, os.WriteFile(dir+"/index.php", []byte("<?php\n"), 0o644))
+	_, err = wt.Add("index.php")
+	require.NoError(t, err)
+
+	hash, err := wt.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "test", Email: "t@t", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	// Create version tags
+	_, err = repo.CreateTag("v1.0.0", hash, nil)
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v2.0.0", hash, nil)
+	require.NoError(t, err)
+	// Create non-version tag
+	_, err = repo.CreateTag("latest", hash, nil)
+	require.NoError(t, err)
+
+	cloneDir := t.TempDir()
+	gotRepo, refs, err := RefsFromTags(dir, cloneDir, IndexOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, gotRepo)
+
+	assert.Contains(t, refs, "v1.0.0")
+	assert.Contains(t, refs, "v2.0.0")
+	assert.NotContains(t, refs, "latest")
+	assert.Equal(t, hash.String(), refs["v1.0.0"])
+}
+
+func TestRefsFromTags_AnnotatedTags(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(dir+"/index.php", []byte("<?php\n"), 0o644))
+	_, err = wt.Add("index.php")
+	require.NoError(t, err)
+
+	commitHash, err := wt.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "test", Email: "t@t", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	// Create annotated tag
+	_, err = repo.CreateTag("v1.0.0", commitHash, &git.CreateTagOptions{
+		Tagger:  &object.Signature{Name: "test", Email: "t@t", When: time.Now()},
+		Message: "release v1.0.0",
+	})
+	require.NoError(t, err)
+
+	cloneDir := t.TempDir()
+	_, refs, err := RefsFromTags(dir, cloneDir, IndexOptions{})
+	require.NoError(t, err)
+
+	// Annotated tag should resolve to the commit hash, not the tag object hash
+	assert.Equal(t, commitHash.String(), refs["v1.0.0"])
+}
+
+func TestRefsFromTags_FiltersNonVersionTags(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(dir+"/index.php", []byte("<?php\n"), 0o644))
+	_, err = wt.Add("index.php")
+	require.NoError(t, err)
+
+	hash, err := wt.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "test", Email: "t@t", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	tags := []string{"v1.0.0", "2.4.7", "latest", "release-2024", "stable", "nightly"}
+	for _, tag := range tags {
+		_, err = repo.CreateTag(tag, hash, nil)
+		require.NoError(t, err)
+	}
+
+	cloneDir := t.TempDir()
+	_, refs, err := RefsFromTags(dir, cloneDir, IndexOptions{})
+	require.NoError(t, err)
+
+	assert.Contains(t, refs, "v1.0.0")
+	assert.Contains(t, refs, "2.4.7")
+	assert.NotContains(t, refs, "latest")
+	assert.NotContains(t, refs, "release-2024")
+	assert.NotContains(t, refs, "stable")
+	assert.NotContains(t, refs, "nightly")
+}
+
+func TestIndexRepo(t *testing.T) {
+	files := map[string]string{
+		"index.php": "<?php\necho 'hello';\n",
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	refs := map[string]string{"v1.0.0": commitHash}
+	db := hashdb.New()
+
+	_, err = IndexRepo(repo, refs, db, IndexOptions{NoPlatform: true})
+	require.NoError(t, err)
+	assert.Greater(t, db.Len(), 0)
+}
+
 func TestCmpVersionDesc(t *testing.T) {
 	versions := []string{"1.0.0", "3.255.8", "3.49.0", "3.356.10", "v2.1.0", "3.103.2-p3", "3.103.2"}
 	slices.SortFunc(versions, cmpVersionDesc)

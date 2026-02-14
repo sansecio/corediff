@@ -238,6 +238,40 @@ func TestParseReplace(t *testing.T) {
 	}
 }
 
+func TestParseName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "standard package",
+			input: `{"name": "magento/magento2ce", "version": "2.4.7"}`,
+			want:  "magento/magento2ce",
+		},
+		{
+			name:  "no name field",
+			input: `{"version": "1.0.0"}`,
+			want:  "",
+		},
+		{
+			name:  "empty name",
+			input: `{"name": ""}`,
+			want:  "",
+		},
+		{
+			name:  "invalid json",
+			input: `{not valid`,
+			want:  "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ParseName([]byte(tt.input)))
+		})
+	}
+}
+
 func TestNormalizeRepoURL(t *testing.T) {
 	tests := []struct {
 		input string

@@ -65,13 +65,16 @@ func (a *dbAddArg) Execute(_ []string) error {
 		return err
 	}
 
-	if a.Packagist != "" || a.Composer != "" || a.Update {
+	if a.Packagist != "" || a.Composer != "" || a.Update || (len(a.Path.Path) == 1 && isGitURL(a.Path.Path[0])) {
 		mf, mfErr := manifest.Load(manifest.PathFromDB(dbPath))
 		if mfErr != nil {
 			return fmt.Errorf("loading manifest: %w", mfErr)
 		}
 		defer mf.Close()
 
+		if len(a.Path.Path) == 1 && isGitURL(a.Path.Path[0]) {
+			return a.executeGitURL(a.Path.Path[0], db, dbPath, mf)
+		}
 		if a.Update {
 			return a.executeUpdate(db, dbPath, mf)
 		}
@@ -540,6 +543,111 @@ func sanitizePath(s string) string {
 		}
 	}
 	return string(out)
+}
+
+// isGitURL returns true if s looks like a git URL (contains "://" or starts with "git@").
+func isGitURL(s string) bool {
+	return strings.Contains(s, "://") || strings.HasPrefix(s, "git@")
+}
+
+func (a *dbAddArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
+	opts := gitindex.IndexOptions{
+		NoPlatform:   a.NoPlatform,
+		AllValidText: a.AllValidText,
+	}
+
+	if _, err := a.buildHTTPClient(&opts); err != nil {
+		return err
+	}
+
+	// Determine clone directory
+	var cloneDir string
+	if dbCommand.CacheDir != "" {
+		cloneDir = filepath.Join(dbCommand.CacheDir, "git", sanitizePath(url))
+		if err := os.MkdirAll(cloneDir, 0o755); err != nil {
+			return fmt.Errorf("creating cache dir: %w", err)
+		}
+	} else {
+		tmp, err := os.MkdirTemp("", "corediff-git-*")
+		if err != nil {
+			return fmt.Errorf("creating temp dir: %w", err)
+		}
+		defer os.RemoveAll(tmp)
+		cloneDir = tmp
+	}
+
+	fmt.Printf("Cloning %s ...\n", url)
+	repo, refs, err := gitindex.RefsFromTags(url, cloneDir, opts)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Found %d version tags\n", len(refs))
+
+	// Filter out already-indexed versions.
+	// Use the URL as package identifier in the manifest.
+	total := len(refs)
+	for version := range refs {
+		if mf.IsIndexed(url, version) {
+			delete(refs, version)
+		}
+	}
+	if skipped := total - len(refs); skipped > 0 {
+		fmt.Printf("Skipping %d already-indexed versions\n", skipped)
+	}
+	if len(refs) == 0 {
+		fmt.Printf("All %d versions already indexed\n", total)
+		return nil
+	}
+
+	fmt.Printf("Indexing %d new versions ...\n", len(refs))
+
+	// Try to read composer.json from HEAD to determine PathPrefix.
+	if !opts.NoPlatform && opts.PathPrefix == "" {
+		if head, hErr := repo.Head(); hErr == nil {
+			if commit, cErr := repo.CommitObject(head.Hash()); cErr == nil {
+				if tree, tErr := commit.Tree(); tErr == nil {
+					if f, fErr := tree.File("composer.json"); fErr == nil {
+						if content, rErr := f.Contents(); rErr == nil {
+							if name := composer.ParseName([]byte(content)); name != "" {
+								opts.PathPrefix = "vendor/" + name + "/"
+								fmt.Printf("Detected package: %s\n", name)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	oldSize := db.Len()
+	opts.OnVersionDone = func(version string) {
+		if err := mf.MarkIndexed(url, version); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+		}
+	}
+
+	replaces, err := gitindex.IndexRepo(repo, refs, db, opts)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range replaces {
+		if err := mf.MarkReplaced(r); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+		}
+	}
+	if len(replaces) > 0 {
+		fmt.Printf("Recorded %d replaced packages in manifest\n", len(replaces))
+	}
+
+	newHashes := db.Len() - oldSize
+	if newHashes > 0 {
+		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
+		return db.Save(dbPath)
+	}
+	fmt.Println("Found no new code hashes...")
+	return nil
 }
 
 func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool, noPlatform bool) {
