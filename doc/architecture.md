@@ -132,6 +132,43 @@ corediff db add -d <db>
                └──────────────────────────────────────────────────┘
 ```
 
+## Manifest Format
+
+The manifest (`.manifest` file alongside the `.db`) is an append-only text file tracking indexing state across sessions.
+
+```
+Two entry types:
+
+  package@version          "This specific version has been indexed"
+  replace:package          "This package is provided by a monorepo; never index independently"
+
+Examples:
+  https://github.com/magento/magento2ce@v2.4.7
+  magento/module-catalog@104.0.7
+  monolog/monolog@3.5.0
+  replace:magento/module-catalog
+  replace:magento/module-sales
+```
+
+**Why `replace:`?** When a monorepo like `magento/magento2ce` declares `"replace": {"magento/module-catalog": "*"}`, it means the monorepo is the canonical source for that package. We record `replace:magento/module-catalog` to block *all* versions from being independently indexed — via `--update`, `--composer`, or lock-dep following. Without it, any version of `magento/module-catalog` appearing in a composer.lock would be cloned from packagist, duplicating what the monorepo already provides.
+
+Sub-packages embedded in a monorepo do NOT get individual `package@version` entries — the `replace:` entry is sufficient. This avoids ~10,000 redundant manifest lines for large monorepos like Magento.
+
+## Git URL Indexing: Dependency Following
+
+When indexing a git URL (e.g., `corediff db add <git-url>`), after indexing the main repo:
+
+```
+1. Index all version tags → hash DB + replaces + sub-packages
+2. Collect composer.lock from each version tag
+3. Extract unique dep@version pairs across all tags
+4. Filter out: replaced packages, already-indexed versions
+5. Group remaining deps by package name
+6. For each dep package: clone once, index all needed versions
+```
+
+This captures third-party dependencies (monolog, symfony, laminas, etc.) that any release of the platform ever shipped with. Since `composer.lock` contains the flattened dependency tree (all transitive deps at top level), no recursion is needed. Dep indexing does not recurse into deps' own lock files (`CollectLockDeps=false`).
+
 ## Hash Database Format (CDDB)
 
 ```

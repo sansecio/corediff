@@ -29,6 +29,12 @@ type SubPackage struct {
 	Dir     string // directory within repo, e.g. "app/code/Magento/Catalog/"
 }
 
+// IndexResult holds the results from indexing a set of git refs.
+type IndexResult struct {
+	Replaces []string              // package names from composer.json "replace" sections
+	LockDeps []composer.LockPackage // unique deps from composer.lock across all versions
+}
+
 // IndexOptions controls how files are indexed.
 type IndexOptions struct {
 	NoPlatform      bool
@@ -38,13 +44,13 @@ type IndexOptions struct {
 	HTTP            *http.Client      // optional; defaults to http.DefaultClient
 	OnVersionDone   func(version string)                // called after each version is indexed
 	OnSubPackage    func(name, version string)          // called for each sub-package found in a version
+	CollectLockDeps bool                                // collect composer.lock deps across all versions
 }
 
 // CloneAndIndex bare-clones repoURL, then for each version→ref pair,
 // walks the git tree and hashes all eligible files into db.
-// Returns the union of package names from composer.json "replace" sections
-// across all indexed versions.
-func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) ([]string, error) {
+// Returns an IndexResult with replace entries and (optionally) lock deps.
+func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) (*IndexResult, error) {
 	opts.InstallHTTPTransport()
 
 	tmpDir, err := os.MkdirTemp("", "corediff-git-*")
@@ -60,13 +66,12 @@ func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, op
 		return nil, fmt.Errorf("cloning %s: %w", repoURL, err)
 	}
 
-	replaces := indexRefs(repo, refs, db, opts)
-	return replaces, nil
+	return indexRefs(repo, refs, db, opts), nil
 }
 
 // CloneAndIndexWithDir is like CloneAndIndex but uses an existing directory
 // for the bare clone. If the directory already contains a valid repo, it reuses it.
-func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) ([]string, error) {
+func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) (*IndexResult, error) {
 	opts.InstallHTTPTransport()
 
 	var repo *git.Repository
@@ -88,8 +93,7 @@ func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *
 		}
 	}
 
-	replaces := indexRefs(repo, refs, db, opts)
-	return replaces, nil
+	return indexRefs(repo, refs, db, opts), nil
 }
 
 // RefsFromTags clones (or opens) a git repo and returns a map of
@@ -148,7 +152,7 @@ func RefsFromTags(repoURL, cloneDir string, opts IndexOptions) (*git.Repository,
 }
 
 // IndexRepo indexes an already-opened repo with the given refs.
-func IndexRepo(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) ([]string, error) {
+func IndexRepo(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) (*IndexResult, error) {
 	return indexRefs(repo, refs, db, opts), nil
 }
 
@@ -200,7 +204,7 @@ func resolveStoredPath(filePath string, subPkgs []SubPackage, defaultPrefix stri
 	return defaultPrefix + filePath
 }
 
-func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) []string {
+func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) *IndexResult {
 	versions := slices.Collect(maps.Keys(refs))
 	slices.SortFunc(versions, cmpVersionDesc)
 
@@ -211,6 +215,9 @@ func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, 
 
 	// Collect replace entries from composer.json across all versions.
 	replaceSet := make(map[string]struct{})
+
+	// Collect deps from composer.lock across all versions.
+	lockDepSet := make(map[string]composer.LockPackage) // key: "name@version"
 
 	for _, version := range versions {
 		tree, _, err := indexRef(repo, version, refs[version], db, opts, seenBlobs)
@@ -231,9 +238,36 @@ func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, 
 				}
 			}
 		}
+
+		// Read composer.lock from the tree to collect dependency versions.
+		if opts.CollectLockDeps && tree != nil {
+			if f, fErr := tree.File("composer.lock"); fErr == nil {
+				if content, cErr := f.Contents(); cErr == nil {
+					if pkgs, pErr := composer.ParseLockPackages([]byte(content)); pErr == nil {
+						for _, pkg := range pkgs {
+							key := pkg.Name + "@" + pkg.Version
+							if _, exists := lockDepSet[key]; !exists {
+								lockDepSet[key] = pkg
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
-	return slices.Collect(maps.Keys(replaceSet))
+	// Filter lock deps: exclude packages that are replaced by the monorepo.
+	var lockDeps []composer.LockPackage
+	for _, dep := range lockDepSet {
+		if _, replaced := replaceSet[dep.Name]; !replaced {
+			lockDeps = append(lockDeps, dep)
+		}
+	}
+
+	return &IndexResult{
+		Replaces: slices.Collect(maps.Keys(replaceSet)),
+		LockDeps: lockDeps,
+	}
 }
 
 func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (*object.Tree, []SubPackage, error) {

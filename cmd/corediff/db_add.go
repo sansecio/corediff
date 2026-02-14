@@ -155,22 +155,22 @@ func (a *dbAddArg) indexVersions(pkg string, versions []packagist.Version, db *h
 
 		logVerbose(fmt.Sprintf("  cloning %s", repoURL))
 
-		var replaces []string
+		var result *gitindex.IndexResult
 		var gitErr error
 		if dbCommand.CacheDir != "" {
 			cloneDir := filepath.Join(dbCommand.CacheDir, "git", sanitizePath(pkg))
 			if err := os.MkdirAll(cloneDir, 0o755); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: creating cache dir for %s: %v\n", pkg, err)
 			} else {
-				replaces, gitErr = gitindex.CloneAndIndexWithDir(repoURL, cloneDir, refs, db, opts)
+				result, gitErr = gitindex.CloneAndIndexWithDir(repoURL, cloneDir, refs, db, opts)
 			}
 		} else {
-			replaces, gitErr = gitindex.CloneAndIndex(repoURL, refs, db, opts)
+			result, gitErr = gitindex.CloneAndIndex(repoURL, refs, db, opts)
 		}
 		if gitErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: git clone failed for %s: %v, falling back to zip\n", pkg, gitErr)
-		} else {
-			return replaces
+		} else if result != nil {
+			return result.Replaces
 		}
 	}
 
@@ -403,18 +403,32 @@ func (a *dbAddArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifest.
 	}
 
 	// Partition into git URLs and packagist package names.
+	// Skip replaced packages — they're provided by a monorepo.
 	var gitURLs, packagistPkgs []string
+	var replaced int
 	for _, pkg := range pkgs {
 		if isGitURL(pkg) {
 			gitURLs = append(gitURLs, pkg)
+		} else if mf.IsReplaced(pkg) {
+			replaced++
 		} else {
 			packagistPkgs = append(packagistPkgs, pkg)
 		}
 	}
 
-	fmt.Printf("Checking %d packages for new versions", len(pkgs))
-	if len(gitURLs) > 0 {
-		fmt.Printf(" (%d packagist, %d git)", len(packagistPkgs), len(gitURLs))
+	fmt.Printf("Checking %d packages for new versions", len(packagistPkgs)+len(gitURLs))
+	if len(gitURLs) > 0 || replaced > 0 {
+		parts := []string{}
+		if len(packagistPkgs) > 0 {
+			parts = append(parts, fmt.Sprintf("%d packagist", len(packagistPkgs)))
+		}
+		if len(gitURLs) > 0 {
+			parts = append(parts, fmt.Sprintf("%d git", len(gitURLs)))
+		}
+		if replaced > 0 {
+			parts = append(parts, fmt.Sprintf("%d replaced, skipped", replaced))
+		}
+		fmt.Printf(" (%s)", strings.Join(parts, ", "))
 	}
 	fmt.Println("...")
 
@@ -573,13 +587,12 @@ func (a *dbAddArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest
 	pkgOpts.OnSubPackage = func(name, version string) {
 		if version != "" {
 			subPkgSet[name+"@"+version] = struct{}{}
-			if err := mf.MarkIndexed(name, version); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
-			}
 		}
 	}
 
-	replaces, err := gitindex.IndexRepo(repo, refs, db, pkgOpts)
+	pkgOpts.CollectLockDeps = true
+
+	result, err := gitindex.IndexRepo(repo, refs, db, pkgOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: indexing %s: %v\n", url, err)
 		return
@@ -590,9 +603,48 @@ func (a *dbAddArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest
 	}
 
 	// Also write replaces found across all indexed versions (may overlap with HEAD).
-	for _, r := range replaces {
+	for _, r := range result.Replaces {
 		if err := mf.MarkReplaced(r); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+		}
+	}
+
+	// Index dependencies from composer.lock files across all versions.
+	if len(result.LockDeps) > 0 {
+		// Group deps by package name for efficient indexing (single clone per package).
+		depsByPkg := make(map[string][]composer.LockPackage)
+		for _, dep := range result.LockDeps {
+			if !mf.IsIndexed(dep.Name, dep.Version) && !mf.IsReplaced(dep.Name) {
+				depsByPkg[dep.Name] = append(depsByPkg[dep.Name], dep)
+			}
+		}
+
+		if len(depsByPkg) > 0 {
+			totalVersions := 0
+			for _, deps := range depsByPkg {
+				totalVersions += len(deps)
+			}
+			fmt.Printf("Found %d dependency packages (%d versions) from composer.lock files\n",
+				len(depsByPkg), totalVersions)
+
+			for pkgName, deps := range depsByPkg {
+				versions := make([]packagist.Version, 0, len(deps))
+				for _, dep := range deps {
+					versions = append(versions, lockToVersion(dep))
+				}
+
+				depOpts := opts // copy base opts (no callbacks from parent)
+				depOpts.PathPrefix = "vendor/" + pkgName + "/"
+				depOpts.CollectLockDeps = false // don't recurse
+				depOpts.OnVersionDone = func(version string) {
+					if err := mf.MarkIndexed(pkgName, version); err != nil {
+						fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+					}
+				}
+				depOpts.OnSubPackage = nil
+
+				a.indexVersions(pkgName, versions, db, depOpts)
+			}
 		}
 	}
 }

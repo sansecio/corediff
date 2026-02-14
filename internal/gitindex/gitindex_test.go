@@ -73,8 +73,9 @@ func TestCloneAndIndex(t *testing.T) {
 	db := hashdb.New()
 	refs := map[string]string{"v1.0.0": commitHash}
 
-	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	result, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	assert.Greater(t, db.Len(), 0)
 
@@ -97,8 +98,9 @@ func TestCloneAndIndex_PathPrefix(t *testing.T) {
 	db := hashdb.New()
 	refs := map[string]string{"v1.0.0": commitHash}
 
-	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{PathPrefix: "vendor/acme/pkg/"})
+	result, err := CloneAndIndex(repoPath, refs, db, IndexOptions{PathPrefix: "vendor/acme/pkg/"})
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	// Path hash should use the prefix
 	assert.True(t, db.Contains(normalize.PathHash("vendor/acme/pkg/src/Foo.php")))
@@ -115,8 +117,9 @@ func TestCloneAndIndex_NoPlatform(t *testing.T) {
 	db := hashdb.New()
 	refs := map[string]string{"v1.0.0": commitHash}
 
-	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{NoPlatform: true})
+	result, err := CloneAndIndex(repoPath, refs, db, IndexOptions{NoPlatform: true})
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	assert.Greater(t, db.Len(), 0)
 
@@ -133,13 +136,15 @@ func TestCloneAndIndex_AllValidText(t *testing.T) {
 
 	// Without AllValidText, readme.txt should be skipped
 	db1 := hashdb.New()
-	_, err := CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db1, IndexOptions{})
+	result1, err := CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db1, IndexOptions{})
 	require.NoError(t, err)
+	require.NotNil(t, result1)
 
 	// With AllValidText, readme.txt should be included
 	db2 := hashdb.New()
-	_, err = CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db2, IndexOptions{AllValidText: true})
+	result2, err := CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db2, IndexOptions{AllValidText: true})
 	require.NoError(t, err)
+	require.NotNil(t, result2)
 
 	assert.Greater(t, db2.Len(), db1.Len())
 }
@@ -220,8 +225,9 @@ func TestCloneAndIndex_UnreachableRef(t *testing.T) {
 	refs := map[string]string{"v999": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
 
 	// Should not error, just skip unreachable ref
-	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	result, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
+	require.NotNil(t, result)
 	assert.Equal(t, 0, db.Len())
 }
 
@@ -250,8 +256,9 @@ func TestIntegration_PsrLog(t *testing.T) {
 	db := hashdb.New()
 	require.Equal(t, "git", versions[0].Source.Type)
 
-	_, err = CloneAndIndex(versions[0].Source.URL, refs, db, IndexOptions{AllValidText: true, NoPlatform: true})
+	result, err := CloneAndIndex(versions[0].Source.URL, refs, db, IndexOptions{AllValidText: true, NoPlatform: true})
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	t.Logf("Indexed %d hashes from psr/log", db.Len())
 	assert.Greater(t, db.Len(), 10, "expected at least 10 hashes from psr/log")
@@ -309,8 +316,9 @@ func TestCloneAndIndex_BlobDedup(t *testing.T) {
 
 	// Index both versions — blob dedup should skip unchanged files
 	db := hashdb.New()
-	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	result, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
+	require.NotNil(t, result)
 	assert.Greater(t, db.Len(), 0)
 
 	// All line hashes from both versions should be present
@@ -351,11 +359,11 @@ func TestCloneAndIndex_ReturnsReplaces(t *testing.T) {
 	db := hashdb.New()
 	refs := map[string]string{"v1.0.0": commitHash}
 
-	replaces, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	result, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
 
-	slices.Sort(replaces)
-	assert.Equal(t, []string{"magento/module-catalog", "magento/module-checkout"}, replaces)
+	slices.Sort(result.Replaces)
+	assert.Equal(t, []string{"magento/module-catalog", "magento/module-checkout"}, result.Replaces)
 }
 
 func TestCloneAndIndex_NoComposerJson(t *testing.T) {
@@ -367,9 +375,9 @@ func TestCloneAndIndex_NoComposerJson(t *testing.T) {
 	db := hashdb.New()
 	refs := map[string]string{"v1.0.0": commitHash}
 
-	replaces, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	result, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
-	assert.Empty(t, replaces)
+	assert.Empty(t, result.Replaces)
 }
 
 func TestIsVersionTag(t *testing.T) {
@@ -516,8 +524,9 @@ func TestIndexRepo(t *testing.T) {
 	refs := map[string]string{"v1.0.0": commitHash}
 	db := hashdb.New()
 
-	_, err = IndexRepo(repo, refs, db, IndexOptions{NoPlatform: true})
+	result, err := IndexRepo(repo, refs, db, IndexOptions{NoPlatform: true})
 	require.NoError(t, err)
+	require.NotNil(t, result)
 	assert.Greater(t, db.Len(), 0)
 }
 
@@ -637,6 +646,174 @@ func TestIndexRef_SubPackageCallback(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, recorded, "magento/module-catalog@104.0.7")
+}
+
+func TestIndexRefs_CollectsLockDeps(t *testing.T) {
+	files := map[string]string{
+		"index.php": "<?php\necho 'hello';\n",
+		"composer.json": `{"name": "myvendor/myapp"}`,
+		"composer.lock": `{
+			"packages": [
+				{"name": "monolog/monolog", "type": "library", "version": "3.5.0",
+				 "source": {"type": "git", "url": "https://github.com/Seldaek/monolog.git", "reference": "aaa"}},
+				{"name": "psr/log", "type": "library", "version": "3.0.0"},
+				{"name": "php", "type": ""},
+				{"name": "ext-json", "type": ""},
+				{"name": "vendor/meta", "type": "metapackage"}
+			]
+		}`,
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	db := hashdb.New()
+	refs := map[string]string{"v1.0.0": commitHash}
+
+	result := indexRefs(repo, refs, db, IndexOptions{CollectLockDeps: true})
+
+	// Should have monolog and psr/log, not php/ext-json/metapackage
+	depNames := make(map[string]bool)
+	for _, dep := range result.LockDeps {
+		depNames[dep.Name] = true
+	}
+	assert.True(t, depNames["monolog/monolog"], "should contain monolog/monolog")
+	assert.True(t, depNames["psr/log"], "should contain psr/log")
+	assert.False(t, depNames["php"], "should not contain php")
+	assert.False(t, depNames["ext-json"], "should not contain ext-json")
+	assert.False(t, depNames["vendor/meta"], "should not contain metapackage")
+
+	// Verify source info is preserved
+	for _, dep := range result.LockDeps {
+		if dep.Name == "monolog/monolog" {
+			assert.Equal(t, "3.5.0", dep.Version)
+			assert.Equal(t, "git", dep.Source.Type)
+			assert.Equal(t, "https://github.com/Seldaek/monolog.git", dep.Source.URL)
+		}
+	}
+}
+
+func TestIndexRefs_LockDepsExcludesReplaced(t *testing.T) {
+	files := map[string]string{
+		"index.php": "<?php\necho 'hello';\n",
+		"composer.json": `{
+			"name": "magento/magento2ce",
+			"replace": {"magento/module-catalog": "*"}
+		}`,
+		"composer.lock": `{
+			"packages": [
+				{"name": "magento/module-catalog", "type": "library", "version": "104.0.7"},
+				{"name": "monolog/monolog", "type": "library", "version": "3.5.0"}
+			]
+		}`,
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	db := hashdb.New()
+	refs := map[string]string{"v1.0.0": commitHash}
+
+	result := indexRefs(repo, refs, db, IndexOptions{CollectLockDeps: true})
+
+	depNames := make(map[string]bool)
+	for _, dep := range result.LockDeps {
+		depNames[dep.Name] = true
+	}
+	assert.False(t, depNames["magento/module-catalog"], "replaced package should be excluded from lock deps")
+	assert.True(t, depNames["monolog/monolog"], "non-replaced package should be included")
+}
+
+func TestIndexRefs_LockDepsDedup(t *testing.T) {
+	// Two versions with overlapping lock deps → each dep appears only once.
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// v1.0.0 with monolog 3.5.0 and psr/log 3.0.0
+	files1 := map[string]string{
+		"index.php":     "<?php\necho 'v1';\n",
+		"composer.json": `{"name": "myvendor/myapp"}`,
+		"composer.lock": `{"packages": [
+			{"name": "monolog/monolog", "type": "library", "version": "3.5.0"},
+			{"name": "psr/log", "type": "library", "version": "3.0.0"}
+		]}`,
+	}
+	for name, content := range files1 {
+		path := dir + "/" + name
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+		_, err = wt.Add(name)
+		require.NoError(t, err)
+	}
+	h1, err := wt.Commit("v1", &git.CommitOptions{
+		Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	// v2.0.0 with monolog 3.5.0 (same) and psr/log 3.0.1 (different)
+	files2 := map[string]string{
+		"index.php": "<?php\necho 'v2';\n",
+		"composer.lock": `{"packages": [
+			{"name": "monolog/monolog", "type": "library", "version": "3.5.0"},
+			{"name": "psr/log", "type": "library", "version": "3.0.1"}
+		]}`,
+	}
+	for name, content := range files2 {
+		path := dir + "/" + name
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+		_, err = wt.Add(name)
+		require.NoError(t, err)
+	}
+	h2, err := wt.Commit("v2", &git.CommitOptions{
+		Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	db := hashdb.New()
+	refs := map[string]string{
+		"v1.0.0": h1.String(),
+		"v2.0.0": h2.String(),
+	}
+
+	result := indexRefs(repo, refs, db, IndexOptions{CollectLockDeps: true})
+
+	// Count occurrences of each dep
+	depCounts := make(map[string]int)
+	for _, dep := range result.LockDeps {
+		depCounts[dep.Name+"@"+dep.Version]++
+	}
+
+	// monolog 3.5.0 should appear once (deduped across versions)
+	assert.Equal(t, 1, depCounts["monolog/monolog@3.5.0"])
+	// psr/log should have both versions
+	assert.Equal(t, 1, depCounts["psr/log@3.0.0"])
+	assert.Equal(t, 1, depCounts["psr/log@3.0.1"])
+}
+
+func TestIndexRefs_NoLockDepsWhenDisabled(t *testing.T) {
+	files := map[string]string{
+		"index.php":     "<?php\necho 'hello';\n",
+		"composer.json": `{"name": "myvendor/myapp"}`,
+		"composer.lock": `{"packages": [
+			{"name": "monolog/monolog", "type": "library", "version": "3.5.0"}
+		]}`,
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	db := hashdb.New()
+	refs := map[string]string{"v1.0.0": commitHash}
+
+	// CollectLockDeps=false (default)
+	result := indexRefs(repo, refs, db, IndexOptions{})
+	assert.Empty(t, result.LockDeps, "LockDeps should be empty when CollectLockDeps is false")
 }
 
 func TestCmpVersionDesc(t *testing.T) {

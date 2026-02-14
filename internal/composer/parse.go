@@ -62,7 +62,7 @@ func ParseProject(jsonPath string) (*ComposerProject, error) {
 		return nil, fmt.Errorf("parsing repositories: %w", err)
 	}
 
-	pkgs, err := parseLockPackages(lockData)
+	pkgs, err := ParseLockPackages(lockData)
 	if err != nil {
 		return nil, fmt.Errorf("parsing lock packages: %w", err)
 	}
@@ -136,9 +136,9 @@ func NormalizeRepoURL(u string) string {
 	return u
 }
 
-// parseLockPackages extracts non-meta, non-platform packages from composer.lock.
+// ParseLockPackages extracts non-meta, non-platform packages from composer.lock.
 // Only "packages" is read; "packages-dev" is skipped.
-func parseLockPackages(data []byte) ([]LockPackage, error) {
+func ParseLockPackages(data []byte) ([]LockPackage, error) {
 	var lock struct {
 		Packages []LockPackage `json:"packages"`
 	}

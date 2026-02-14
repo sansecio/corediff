@@ -347,11 +347,11 @@ func TestUpdateGitURLEntry_WritesSubPackagesToManifest(t *testing.T) {
 	// Verify monorepo version was indexed
 	assert.True(t, mf.IsIndexed(dir, "v1.0.0"))
 
-	// Verify sub-packages were recorded with their own versions
-	assert.True(t, mf.IsIndexed("magento/module-catalog", "104.0.7"),
-		"sub-package should be recorded with its own version")
-	assert.True(t, mf.IsIndexed("magento/module-sales", "103.0.7"),
-		"sub-package should be recorded with its own version")
+	// Sub-packages should NOT have individual @version entries — replace: covers them
+	assert.False(t, mf.IsIndexed("magento/module-catalog", "104.0.7"),
+		"replaced sub-packages should not have @version manifest entries")
+	assert.False(t, mf.IsIndexed("magento/module-sales", "103.0.7"),
+		"replaced sub-packages should not have @version manifest entries")
 
 	// Verify path hashes use canonical vendor paths
 	assert.True(t, db.Contains(normalize.PathHash("vendor/magento/module-catalog/Block/Product.php")),

@@ -362,6 +362,77 @@ func TestParseVersion(t *testing.T) {
 	}
 }
 
+func TestParseLockPackages(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    []string
+		wantErr bool
+	}{
+		{
+			name: "filters platform and metapackages",
+			input: `{
+				"packages": [
+					{"name": "vendor/alpha", "type": "library", "version": "1.0.0"},
+					{"name": "php", "type": ""},
+					{"name": "ext-json", "type": ""},
+					{"name": "vendor/meta", "type": "metapackage"},
+					{"name": "vendor/beta", "type": "library", "version": "2.0.0"}
+				]
+			}`,
+			want: []string{"vendor/alpha", "vendor/beta"},
+		},
+		{
+			name:  "empty packages",
+			input: `{"packages": []}`,
+			want:  []string{},
+		},
+		{
+			name:    "invalid json",
+			input:   `{not valid`,
+			wantErr: true,
+		},
+		{
+			name: "preserves source and dist",
+			input: `{
+				"packages": [{
+					"name": "vendor/alpha",
+					"type": "library",
+					"version": "1.0.0",
+					"source": {"type": "git", "url": "https://github.com/vendor/alpha.git", "reference": "abc123"},
+					"dist": {"type": "zip", "url": "https://example.com/alpha.zip", "reference": "abc123"}
+				}]
+			}`,
+			want: []string{"vendor/alpha"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pkgs, err := ParseLockPackages([]byte(tt.input))
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, pkgNames(pkgs))
+		})
+	}
+
+	// Extra: verify source/dist fields are preserved
+	input := `{"packages": [{"name": "v/a", "type": "library", "version": "1.0",
+		"source": {"type": "git", "url": "https://g.com/a.git", "reference": "abc"},
+		"dist": {"type": "zip", "url": "https://g.com/a.zip", "reference": "def"}}]}`
+	pkgs, err := ParseLockPackages([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+	assert.Equal(t, "git", pkgs[0].Source.Type)
+	assert.Equal(t, "https://g.com/a.git", pkgs[0].Source.URL)
+	assert.Equal(t, "abc", pkgs[0].Source.Reference)
+	assert.Equal(t, "zip", pkgs[0].Dist.Type)
+	assert.Equal(t, "https://g.com/a.zip", pkgs[0].Dist.URL)
+	assert.Equal(t, "def", pkgs[0].Dist.Reference)
+}
+
 func TestNormalizeRepoURL(t *testing.T) {
 	tests := []struct {
 		input string
