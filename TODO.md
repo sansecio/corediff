@@ -74,6 +74,12 @@ Pipeline: `corediff db add --packagist <package>`, `corediff db add --composer <
 - [x] Content-defined chunking (CDC) for minified JS/JSON: Buzhash rolling window, variable-size chunks (64-512 bytes)
 - [ ] Parallel file scanning (worker pool)
 
+## Concurrency
+
+- [x] Worker pool (GOMAXPROCS semaphore) for `--composer` and `--update` modes
+- [x] Documented in `doc/concurrency.md`
+- [-] Parallel git tag processing — investigated, not viable (seenBlobs dedup across versions saves ~95% of work for monorepos like magento2; parallelizing would multiply total I/O)
+
 ## Release & update
 
 - [ ] `corediff update` subcommand: check GitHub releases, download newer binary if available. No auto-update.
@@ -92,3 +98,8 @@ Separate tool that pipes corediff output through an LLM for risk prioritization.
 - [ ] Cluster related changes ("these 40 lines across 8 files are one custom module")
 
 
+
+# manual 
+
+- [ ] git indexer does not correctly identify packagist packages from monorepo (see magento2), or at least no write them to the manifest
+- [ ] if packages are embedded in a monorepo, do their relative paths match the ones if they had been installed via composer? that is important since most of our target installs use composer and we only analyze a file if the relative path has been registered

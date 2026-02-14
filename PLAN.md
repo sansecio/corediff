@@ -43,6 +43,16 @@ and indexes all transitive dependencies.
 
 ---
 
+## Concurrency analysis (done)
+
+Documented in `doc/concurrency.md`. Key findings:
+
+- `--composer` and `--update` use a GOMAXPROCS-bounded worker pool (different packages indexed in parallel).
+- `executeGitURL` (single repo) processes tags sequentially — this is intentional. The `seenBlobs` dedup skips ~95% of files in older versions. Parallelizing across tags would multiply total work and likely slow things down.
+- Scanning is sequential. Parallel file scanning is a future option (step 8).
+
+---
+
 ## Step 8 — Scanner improvements
 
 **`corediff scan` enhancements:**
