@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	git "github.com/go-git/go-git/v5"
 	"github.com/gwillem/corediff/internal/composer"
 	"github.com/gwillem/corediff/internal/gitindex"
 	"github.com/gwillem/corediff/internal/hashdb"
@@ -560,24 +561,19 @@ func (a *dbAddArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest
 	// Detect composer package name for path prefix.
 	pkgOpts := opts
 	if !opts.NoPlatform && opts.PathPrefix == "" {
-		if head, hErr := repo.Head(); hErr == nil {
-			if commit, cErr := repo.CommitObject(head.Hash()); cErr == nil {
-				if tree, tErr := commit.Tree(); tErr == nil {
-					if f, fErr := tree.File("composer.json"); fErr == nil {
-						if content, rErr := f.Contents(); rErr == nil {
-							if name := composer.ParseName([]byte(content)); name != "" {
-								pkgOpts.PathPrefix = "vendor/" + name + "/"
-							}
-						}
-					}
-				}
-			}
-		}
+		pkgOpts.PathPrefix = readComposerPathPrefix(repo)
 	}
 
 	pkgOpts.OnVersionDone = func(version string) {
 		if err := mf.MarkIndexed(url, version); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+		}
+	}
+	pkgOpts.OnSubPackage = func(name, version string) {
+		if version != "" {
+			if err := mf.MarkIndexed(name, version); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+			}
 		}
 	}
 
@@ -587,11 +583,42 @@ func (a *dbAddArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest
 		return
 	}
 
+	// Also write replaces found across all indexed versions (may overlap with HEAD).
 	for _, r := range replaces {
 		if err := mf.MarkReplaced(r); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
 		}
 	}
+}
+
+// readComposerPathPrefix reads the "name" field from HEAD's composer.json
+// and returns a vendor path prefix (e.g. "vendor/magento/magento2ce/").
+// Returns empty string if the name cannot be determined.
+func readComposerPathPrefix(repo *git.Repository) string {
+	head, err := repo.Head()
+	if err != nil {
+		return ""
+	}
+	commit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return ""
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return ""
+	}
+	f, err := tree.File("composer.json")
+	if err != nil {
+		return ""
+	}
+	content, err := f.Contents()
+	if err != nil {
+		return ""
+	}
+	if name := composer.ParseName([]byte(content)); name != "" {
+		return "vendor/" + name + "/"
+	}
+	return ""
 }
 
 // indexComposerPackage indexes a single lock file package using source/dist/repo fallback.

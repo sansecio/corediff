@@ -289,6 +289,81 @@ func TestUpdateGitURLEntry(t *testing.T) {
 	assert.Greater(t, db.Len(), 0)
 }
 
+func TestUpdateGitURLEntry_WritesSubPackagesToManifest(t *testing.T) {
+	// Create a monorepo with sub-package composer.json files (like magento2)
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// Create directory structure
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "app/code/Magento/Catalog"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "app/code/Magento/Sales"), 0o755))
+
+	files := map[string]string{
+		"composer.json": `{
+			"name": "magento/magento2ce",
+			"replace": {
+				"magento/module-catalog": "*",
+				"magento/module-sales": "*"
+			}
+		}`,
+		"index.php": "<?php\necho 'hello';\n",
+		"app/code/Magento/Catalog/composer.json":     `{"name": "magento/module-catalog", "version": "104.0.7"}`,
+		"app/code/Magento/Catalog/Block/Product.php": "<?php\nclass Product {}\n",
+		"app/code/Magento/Sales/composer.json":       `{"name": "magento/module-sales", "version": "103.0.7"}`,
+		"app/code/Magento/Sales/Model/Order.php":     "<?php\nclass Order {}\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+		_, err = wt.Add(name)
+		require.NoError(t, err)
+	}
+
+	h1, err := wt.Commit("v1", &git.CommitOptions{
+		Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()},
+	})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v1.0.0", h1, nil)
+	require.NoError(t, err)
+
+	// Set up empty manifest
+	tmp := t.TempDir()
+	mfPath := filepath.Join(tmp, "test.manifest")
+	mf, err := manifest.Load(mfPath)
+	require.NoError(t, err)
+	defer mf.Close()
+
+	db := hashdb.New()
+	opts := gitindex.IndexOptions{}
+
+	arg := &dbAddArg{}
+	arg.updateGitURLEntry(dir, db, mf, opts)
+
+	// Verify monorepo version was indexed
+	assert.True(t, mf.IsIndexed(dir, "v1.0.0"))
+
+	// Verify sub-packages were recorded with their own versions
+	assert.True(t, mf.IsIndexed("magento/module-catalog", "104.0.7"),
+		"sub-package should be recorded with its own version")
+	assert.True(t, mf.IsIndexed("magento/module-sales", "103.0.7"),
+		"sub-package should be recorded with its own version")
+
+	// Verify path hashes use canonical vendor paths
+	assert.True(t, db.Contains(normalize.PathHash("vendor/magento/module-catalog/Block/Product.php")),
+		"sub-package file should use canonical vendor path")
+	assert.True(t, db.Contains(normalize.PathHash("vendor/magento/module-sales/Model/Order.php")),
+		"sub-package file should use canonical vendor path")
+
+	// Replace entries should also be in manifest
+	assert.True(t, mf.IsReplaced("magento/module-catalog"))
+	assert.True(t, mf.IsReplaced("magento/module-sales"))
+}
+
 func TestDBInfo(t *testing.T) {
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "test.db")

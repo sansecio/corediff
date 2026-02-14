@@ -22,6 +22,13 @@ import (
 	"github.com/gwillem/corediff/internal/normalize"
 )
 
+// SubPackage represents a composer sub-package found inside a monorepo tree.
+type SubPackage struct {
+	Name    string // e.g. "magento/module-catalog"
+	Version string // e.g. "104.0.7"
+	Dir     string // directory within repo, e.g. "app/code/Magento/Catalog/"
+}
+
 // IndexOptions controls how files are indexed.
 type IndexOptions struct {
 	NoPlatform      bool
@@ -29,7 +36,8 @@ type IndexOptions struct {
 	PathPrefix      string            // prepended to file paths for path hashes (e.g. "vendor/psr/log/")
 	Verbose         int               // verbosity level: 1=-v (versions), 3=-vvv (files), 4=-vvvv (lines)
 	HTTP            *http.Client      // optional; defaults to http.DefaultClient
-	OnVersionDone   func(version string) // called after each version is indexed (for manifest updates)
+	OnVersionDone   func(version string)                // called after each version is indexed
+	OnSubPackage    func(name, version string)          // called for each sub-package found in a version
 }
 
 // CloneAndIndex bare-clones repoURL, then for each version→ref pair,
@@ -154,6 +162,44 @@ func isVersionTag(name string) bool {
 	return s[0] >= '0' && s[0] <= '9'
 }
 
+// findSubPackages scans a git tree for composer.json files in subdirectories
+// and returns the sub-packages found (each with name, version, and directory).
+// The root composer.json is skipped.
+func findSubPackages(tree *object.Tree) []SubPackage {
+	var pkgs []SubPackage
+	tree.Files().ForEach(func(f *object.File) error {
+		base := f.Name[strings.LastIndex(f.Name, "/")+1:]
+		if base != "composer.json" || f.Name == "composer.json" {
+			return nil
+		}
+		content, err := f.Contents()
+		if err != nil {
+			return nil
+		}
+		name := composer.ParseName([]byte(content))
+		if name == "" {
+			return nil
+		}
+		version := composer.ParseVersion([]byte(content))
+		dir := f.Name[:strings.LastIndex(f.Name, "/")+1]
+		pkgs = append(pkgs, SubPackage{Name: name, Version: version, Dir: dir})
+		return nil
+	})
+	return pkgs
+}
+
+// resolveStoredPath returns the canonical vendor path for a file.
+// If the file is inside a sub-package, it uses vendor/<sub-package-name>/...
+// Otherwise, it falls back to the default prefix.
+func resolveStoredPath(filePath string, subPkgs []SubPackage, defaultPrefix string) string {
+	for _, sp := range subPkgs {
+		if strings.HasPrefix(filePath, sp.Dir) {
+			return "vendor/" + sp.Name + "/" + filePath[len(sp.Dir):]
+		}
+	}
+	return defaultPrefix + filePath
+}
+
 func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) []string {
 	versions := slices.Collect(maps.Keys(refs))
 	slices.SortFunc(versions, cmpVersionDesc)
@@ -167,7 +213,7 @@ func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, 
 	replaceSet := make(map[string]struct{})
 
 	for _, version := range versions {
-		tree, err := indexRef(repo, version, refs[version], db, opts, seenBlobs)
+		tree, _, err := indexRef(repo, version, refs[version], db, opts, seenBlobs)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping %s (%s): %v\n", version, refs[version][:minLen(refs[version], 12)], err)
 			continue
@@ -190,22 +236,29 @@ func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, 
 	return slices.Collect(maps.Keys(replaceSet))
 }
 
-func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (*object.Tree, error) {
+func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (*object.Tree, []SubPackage, error) {
 	commit, err := repo.CommitObject(plumbing.NewHash(ref))
 	if err != nil {
-		return nil, fmt.Errorf("resolving commit: %w", err)
+		return nil, nil, fmt.Errorf("resolving commit: %w", err)
 	}
 
 	tree, err := commit.Tree()
 	if err != nil {
-		return nil, fmt.Errorf("getting tree: %w", err)
+		return nil, nil, fmt.Errorf("getting tree: %w", err)
+	}
+
+	// Pre-scan for sub-package composer.json files to resolve canonical paths.
+	var subPkgs []SubPackage
+	if !opts.NoPlatform && opts.PathPrefix != "" {
+		subPkgs = findSubPackages(tree)
 	}
 
 	var newHashes, totalHashes, skippedFiles int
 	start := time.Now()
 
 	err = tree.Files().ForEach(func(f *object.File) error {
-		n, t := indexFileCount(f, db, opts, seenBlobs)
+		storedPath := resolveStoredPath(f.Name, subPkgs, opts.PathPrefix)
+		n, t := indexFileCount(f, storedPath, db, opts, seenBlobs)
 		if n == 0 && t == 0 {
 			skippedFiles++
 		}
@@ -228,10 +281,17 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 		opts.OnVersionDone(version)
 	}
 
-	if err != nil {
-		return nil, err
+	// Notify about sub-packages found in this version.
+	if err == nil && opts.OnSubPackage != nil {
+		for _, sp := range subPkgs {
+			opts.OnSubPackage(sp.Name, sp.Version)
+		}
 	}
-	return tree, nil
+
+	if err != nil {
+		return nil, nil, err
+	}
+	return tree, subPkgs, nil
 }
 
 func (opts IndexOptions) log(level int, format string, args ...any) {
@@ -260,8 +320,9 @@ func (opts IndexOptions) InstallHTTPTransport() {
 }
 
 // indexFileCount indexes a single file and returns (new hashes added, total hashes processed).
+// storedPath is the canonical path used for path hashing (e.g. "vendor/magento/module-catalog/Block/Product.php").
 // seenBlobs tracks git blob hashes already processed; unchanged files across versions are skipped.
-func indexFileCount(f *object.File, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (int, int) {
+func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (int, int) {
 	if !opts.AllValidText && !normalize.HasValidExt(f.Name) {
 		opts.log(3, "    skip %s (no valid ext)", f.Name)
 		return 0, 0
@@ -296,7 +357,6 @@ func indexFileCount(f *object.File, db *hashdb.HashDB, opts IndexOptions, seenBl
 
 	// Add path hash unless NoPlatform
 	if !opts.NoPlatform {
-		storedPath := opts.PathPrefix + f.Name
 		db.Add(normalize.PathHash(storedPath))
 		opts.log(3, "    hash %s", storedPath)
 	} else {

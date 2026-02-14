@@ -257,6 +257,18 @@ func tryLoadConfigRepos(path string) ([]Repository, error) {
 	return repos, nil
 }
 
+// ParseVersion extracts the "version" field from a composer.json.
+// Returns empty string if the field is missing or the JSON is invalid.
+func ParseVersion(data []byte) string {
+	var raw struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return ""
+	}
+	return raw.Version
+}
+
 // isPlatformPackage returns true for "php" and "ext-*" entries.
 func isPlatformPackage(name string) bool {
 	return name == "php" || strings.HasPrefix(name, "ext-")

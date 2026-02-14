@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/gwillem/corediff/internal/normalize"
@@ -518,6 +519,124 @@ func TestIndexRepo(t *testing.T) {
 	_, err = IndexRepo(repo, refs, db, IndexOptions{NoPlatform: true})
 	require.NoError(t, err)
 	assert.Greater(t, db.Len(), 0)
+}
+
+func TestFindSubPackages(t *testing.T) {
+	files := map[string]string{
+		"composer.json": `{"name": "magento/magento2ce", "version": "2.4.7"}`,
+		"index.php":     "<?php\n",
+		"app/code/Magento/Catalog/composer.json":  `{"name": "magento/module-catalog", "version": "104.0.7"}`,
+		"app/code/Magento/Catalog/Block/Product.php": "<?php\nclass Product {}\n",
+		"app/code/Magento/Sales/composer.json":    `{"name": "magento/module-sales", "version": "103.0.7"}`,
+		"app/code/Magento/Sales/Model/Order.php":  "<?php\nclass Order {}\n",
+		"lib/internal/README.md":                  "no composer.json here",
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	commit, err := repo.CommitObject(plumbing.NewHash(commitHash))
+	require.NoError(t, err)
+	tree, err := commit.Tree()
+	require.NoError(t, err)
+
+	subPkgs := findSubPackages(tree)
+
+	assert.Len(t, subPkgs, 2)
+
+	byName := make(map[string]SubPackage)
+	for _, sp := range subPkgs {
+		byName[sp.Name] = sp
+	}
+
+	catalog := byName["magento/module-catalog"]
+	assert.Equal(t, "104.0.7", catalog.Version)
+	assert.Equal(t, "app/code/Magento/Catalog/", catalog.Dir)
+
+	sales := byName["magento/module-sales"]
+	assert.Equal(t, "103.0.7", sales.Version)
+	assert.Equal(t, "app/code/Magento/Sales/", sales.Dir)
+}
+
+func TestResolveStoredPath(t *testing.T) {
+	subPkgs := []SubPackage{
+		{Name: "magento/module-catalog", Dir: "app/code/Magento/Catalog/"},
+		{Name: "magento/module-sales", Dir: "app/code/Magento/Sales/"},
+	}
+
+	tests := []struct {
+		filePath string
+		want     string
+	}{
+		{"app/code/Magento/Catalog/Block/Product.php", "vendor/magento/module-catalog/Block/Product.php"},
+		{"app/code/Magento/Sales/Model/Order.php", "vendor/magento/module-sales/Model/Order.php"},
+		{"index.php", "vendor/magento/magento2ce/index.php"},
+		{"pub/index.php", "vendor/magento/magento2ce/pub/index.php"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.filePath, func(t *testing.T) {
+			got := resolveStoredPath(tt.filePath, subPkgs, "vendor/magento/magento2ce/")
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIndexRef_SubPackagePaths(t *testing.T) {
+	// Verify that files inside sub-packages get stored with canonical vendor paths
+	files := map[string]string{
+		"composer.json": `{"name": "magento/magento2ce", "version": "2.4.7"}`,
+		"index.php":     "<?php\necho 'root';\n",
+		"app/code/Magento/Catalog/composer.json":     `{"name": "magento/module-catalog", "version": "104.0.7"}`,
+		"app/code/Magento/Catalog/Block/Product.php": "<?php\nclass Product {}\n",
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	db := hashdb.New()
+	opts := IndexOptions{PathPrefix: "vendor/magento/magento2ce/"}
+	_, _, err = indexRef(repo, "2.4.7", commitHash, db, opts, nil)
+	require.NoError(t, err)
+
+	// Root file should be stored under the root package prefix
+	assert.True(t, db.Contains(normalize.PathHash("vendor/magento/magento2ce/index.php")),
+		"root file should use root package prefix")
+
+	// Sub-package file should be stored under canonical vendor path
+	assert.True(t, db.Contains(normalize.PathHash("vendor/magento/module-catalog/Block/Product.php")),
+		"sub-package file should use canonical vendor path")
+
+	// Should NOT be stored under the monorepo path
+	assert.False(t, db.Contains(normalize.PathHash("vendor/magento/magento2ce/app/code/Magento/Catalog/Block/Product.php")),
+		"sub-package file should NOT use monorepo path")
+}
+
+func TestIndexRef_SubPackageCallback(t *testing.T) {
+	files := map[string]string{
+		"composer.json": `{"name": "magento/magento2ce", "version": "2.4.7"}`,
+		"app/code/Magento/Catalog/composer.json": `{"name": "magento/module-catalog", "version": "104.0.7"}`,
+		"app/code/Magento/Catalog/Block/Product.php": "<?php\nclass Product {}\n",
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	repo, err := git.PlainOpen(repoPath)
+	require.NoError(t, err)
+
+	db := hashdb.New()
+	var recorded []string
+	opts := IndexOptions{
+		PathPrefix: "vendor/magento/magento2ce/",
+		OnSubPackage: func(name, version string) {
+			recorded = append(recorded, name+"@"+version)
+		},
+	}
+
+	_, _, err = indexRef(repo, "2.4.7", commitHash, db, opts, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, recorded, "magento/module-catalog@104.0.7")
 }
 
 func TestCmpVersionDesc(t *testing.T) {

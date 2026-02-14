@@ -328,6 +328,40 @@ func TestFindConfigReposEmptyRepos(t *testing.T) {
 	assert.Nil(t, repos)
 }
 
+func TestParseVersion(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "standard version",
+			input: `{"name": "magento/module-catalog", "version": "104.0.7"}`,
+			want:  "104.0.7",
+		},
+		{
+			name:  "no version field",
+			input: `{"name": "magento/module-catalog"}`,
+			want:  "",
+		},
+		{
+			name:  "empty version",
+			input: `{"name": "foo", "version": ""}`,
+			want:  "",
+		},
+		{
+			name:  "invalid json",
+			input: `{not valid`,
+			want:  "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ParseVersion([]byte(tt.input)))
+		})
+	}
+}
+
 func TestNormalizeRepoURL(t *testing.T) {
 	tests := []struct {
 		input string
