@@ -157,6 +157,81 @@ func TestLoadSkipsMalformedLines(t *testing.T) {
 	assert.True(t, m.IsIndexed("vendor/b", "2.0.0"))
 }
 
+func TestMarkReplaced(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.manifest")
+
+	m, err := Load(path)
+	require.NoError(t, err)
+
+	assert.False(t, m.IsReplaced("magento/module-catalog"))
+
+	err = m.MarkReplaced("magento/module-catalog")
+	require.NoError(t, err)
+
+	assert.True(t, m.IsReplaced("magento/module-catalog"))
+	assert.False(t, m.IsReplaced("magento/module-sales"))
+
+	// Idempotent
+	err = m.MarkReplaced("magento/module-catalog")
+	require.NoError(t, err)
+
+	m.Close()
+
+	// Verify persistence: reload and check
+	m2, err := Load(path)
+	require.NoError(t, err)
+	defer m2.Close()
+
+	assert.True(t, m2.IsReplaced("magento/module-catalog"))
+	assert.False(t, m2.IsReplaced("magento/module-sales"))
+}
+
+func TestLoadWithReplaceEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.manifest")
+
+	content := "vendor/a@1.0.0\nreplace:magento/module-catalog\nvendor/b@2.0.0\nreplace:magento/module-sales\n"
+	err := os.WriteFile(path, []byte(content), 0o644)
+	require.NoError(t, err)
+
+	m, err := Load(path)
+	require.NoError(t, err)
+	defer m.Close()
+
+	// Indexed entries still work
+	assert.True(t, m.IsIndexed("vendor/a", "1.0.0"))
+	assert.True(t, m.IsIndexed("vendor/b", "2.0.0"))
+
+	// Replace entries are loaded
+	assert.True(t, m.IsReplaced("magento/module-catalog"))
+	assert.True(t, m.IsReplaced("magento/module-sales"))
+
+	// Packages() should not include replace entries
+	pkgs := m.Packages()
+	assert.Contains(t, pkgs, "vendor/a")
+	assert.Contains(t, pkgs, "vendor/b")
+	assert.NotContains(t, pkgs, "magento/module-catalog")
+	assert.NotContains(t, pkgs, "magento/module-sales")
+}
+
+func TestReplacedIdempotentFileWrites(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.manifest")
+
+	m, err := Load(path)
+	require.NoError(t, err)
+
+	require.NoError(t, m.MarkReplaced("magento/module-catalog"))
+	require.NoError(t, m.MarkReplaced("magento/module-catalog")) // duplicate
+	m.Close()
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, "replace:magento/module-catalog\n", string(data))
+}
+
 func TestIdempotentFileWrites(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.manifest")

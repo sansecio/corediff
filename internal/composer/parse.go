@@ -159,6 +159,26 @@ func parseLockPackages(data []byte) ([]LockPackage, error) {
 	return pkgs, nil
 }
 
+// ParseReplace extracts package names from the "replace" section of a
+// composer.json. Non-package entries are filtered out by requiring exactly
+// one "/" in the name (standard vendor/package format).
+func ParseReplace(data []byte) ([]string, error) {
+	var raw struct {
+		Replace map[string]string `json:"replace"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	var pkgs []string
+	for name := range raw.Replace {
+		if strings.Count(name, "/") == 1 {
+			pkgs = append(pkgs, name)
+		}
+	}
+	return pkgs, nil
+}
+
 // isPlatformPackage returns true for "php" and "ext-*" entries.
 func isPlatformPackage(name string) bool {
 	return name == "php" || strings.HasPrefix(name, "ext-")

@@ -72,9 +72,8 @@ func TestCloneAndIndex(t *testing.T) {
 	db := hashdb.New()
 	refs := map[string]string{"v1.0.0": commitHash}
 
-	err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
-
 
 	assert.Greater(t, db.Len(), 0)
 
@@ -97,9 +96,8 @@ func TestCloneAndIndex_PathPrefix(t *testing.T) {
 	db := hashdb.New()
 	refs := map[string]string{"v1.0.0": commitHash}
 
-	err := CloneAndIndex(repoPath, refs, db, IndexOptions{PathPrefix: "vendor/acme/pkg/"})
+	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{PathPrefix: "vendor/acme/pkg/"})
 	require.NoError(t, err)
-
 
 	// Path hash should use the prefix
 	assert.True(t, db.Contains(normalize.PathHash("vendor/acme/pkg/src/Foo.php")))
@@ -116,9 +114,8 @@ func TestCloneAndIndex_NoPlatform(t *testing.T) {
 	db := hashdb.New()
 	refs := map[string]string{"v1.0.0": commitHash}
 
-	err := CloneAndIndex(repoPath, refs, db, IndexOptions{NoPlatform: true})
+	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{NoPlatform: true})
 	require.NoError(t, err)
-
 
 	assert.Greater(t, db.Len(), 0)
 
@@ -135,15 +132,13 @@ func TestCloneAndIndex_AllValidText(t *testing.T) {
 
 	// Without AllValidText, readme.txt should be skipped
 	db1 := hashdb.New()
-	err := CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db1, IndexOptions{})
+	_, err := CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db1, IndexOptions{})
 	require.NoError(t, err)
-
 
 	// With AllValidText, readme.txt should be included
 	db2 := hashdb.New()
-	err = CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db2, IndexOptions{AllValidText: true})
+	_, err = CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db2, IndexOptions{AllValidText: true})
 	require.NoError(t, err)
-
 
 	assert.Greater(t, db2.Len(), db1.Len())
 }
@@ -224,7 +219,7 @@ func TestCloneAndIndex_UnreachableRef(t *testing.T) {
 	refs := map[string]string{"v999": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
 
 	// Should not error, just skip unreachable ref
-	err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 0, db.Len())
 }
@@ -254,9 +249,8 @@ func TestIntegration_PsrLog(t *testing.T) {
 	db := hashdb.New()
 	require.Equal(t, "git", versions[0].Source.Type)
 
-	err = CloneAndIndex(versions[0].Source.URL, refs, db, IndexOptions{AllValidText: true, NoPlatform: true})
+	_, err = CloneAndIndex(versions[0].Source.URL, refs, db, IndexOptions{AllValidText: true, NoPlatform: true})
 	require.NoError(t, err)
-
 
 	t.Logf("Indexed %d hashes from psr/log", db.Len())
 	assert.Greater(t, db.Len(), 10, "expected at least 10 hashes from psr/log")
@@ -314,7 +308,7 @@ func TestCloneAndIndex_BlobDedup(t *testing.T) {
 
 	// Index both versions — blob dedup should skip unchanged files
 	db := hashdb.New()
-	err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	_, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
 	assert.Greater(t, db.Len(), 0)
 
@@ -331,13 +325,50 @@ func TestCloneAndIndex_BlobDedup(t *testing.T) {
 
 	// Verify by comparing against indexing each version separately (no dedup)
 	dbSeparate := hashdb.New()
-	err = CloneAndIndex(repoPath, map[string]string{"1.0.0": refs["1.0.0"]}, dbSeparate, IndexOptions{})
+	_, err = CloneAndIndex(repoPath, map[string]string{"1.0.0": refs["1.0.0"]}, dbSeparate, IndexOptions{})
 	require.NoError(t, err)
-	err = CloneAndIndex(repoPath, map[string]string{"2.0.0": refs["2.0.0"]}, dbSeparate, IndexOptions{})
+	_, err = CloneAndIndex(repoPath, map[string]string{"2.0.0": refs["2.0.0"]}, dbSeparate, IndexOptions{})
 	require.NoError(t, err)
 
 	// Both approaches should produce the same hashes
 	assert.Equal(t, dbSeparate.Len(), db.Len(), "blob dedup should produce same result as separate indexing")
+}
+
+func TestCloneAndIndex_ReturnsReplaces(t *testing.T) {
+	files := map[string]string{
+		"index.php": "<?php\necho 'hello';\n",
+		"composer.json": `{
+			"name": "magento/magento2ce",
+			"replace": {
+				"magento/module-catalog": "*",
+				"magento/module-checkout": "*"
+			}
+		}`,
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	db := hashdb.New()
+	refs := map[string]string{"v1.0.0": commitHash}
+
+	replaces, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	require.NoError(t, err)
+
+	slices.Sort(replaces)
+	assert.Equal(t, []string{"magento/module-catalog", "magento/module-checkout"}, replaces)
+}
+
+func TestCloneAndIndex_NoComposerJson(t *testing.T) {
+	files := map[string]string{
+		"index.php": "<?php\necho 'hello';\n",
+	}
+	repoPath, commitHash := createTestRepo(t, files)
+
+	db := hashdb.New()
+	refs := map[string]string{"v1.0.0": commitHash}
+
+	replaces, err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, replaces)
 }
 
 func TestCmpVersionDesc(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/gwillem/corediff/internal/composer"
 	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/gwillem/corediff/internal/normalize"
 )
@@ -33,12 +34,14 @@ type IndexOptions struct {
 
 // CloneAndIndex bare-clones repoURL, then for each version→ref pair,
 // walks the git tree and hashes all eligible files into db.
-func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) error {
+// Returns the union of package names from composer.json "replace" sections
+// across all indexed versions.
+func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) ([]string, error) {
 	opts.InstallHTTPTransport()
 
 	tmpDir, err := os.MkdirTemp("", "corediff-git-*")
 	if err != nil {
-		return fmt.Errorf("creating temp dir: %w", err)
+		return nil, fmt.Errorf("creating temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -46,16 +49,16 @@ func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, op
 		URL: repoURL,
 	})
 	if err != nil {
-		return fmt.Errorf("cloning %s: %w", repoURL, err)
+		return nil, fmt.Errorf("cloning %s: %w", repoURL, err)
 	}
 
-	indexRefs(repo, refs, db, opts)
-	return nil
+	replaces := indexRefs(repo, refs, db, opts)
+	return replaces, nil
 }
 
 // CloneAndIndexWithDir is like CloneAndIndex but uses an existing directory
 // for the bare clone. If the directory already contains a valid repo, it reuses it.
-func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) error {
+func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) ([]string, error) {
 	opts.InstallHTTPTransport()
 
 	var repo *git.Repository
@@ -68,20 +71,20 @@ func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *
 			URL: repoURL,
 		})
 		if err != nil {
-			return fmt.Errorf("cloning %s: %w", repoURL, err)
+			return nil, fmt.Errorf("cloning %s: %w", repoURL, err)
 		}
 	} else {
 		err = repo.Fetch(&git.FetchOptions{RemoteName: "origin"})
 		if err != nil && err != git.NoErrAlreadyUpToDate {
-			return fmt.Errorf("fetching %s: %w", repoURL, err)
+			return nil, fmt.Errorf("fetching %s: %w", repoURL, err)
 		}
 	}
 
-	indexRefs(repo, refs, db, opts)
-	return nil
+	replaces := indexRefs(repo, refs, db, opts)
+	return replaces, nil
 }
 
-func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) {
+func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) []string {
 	versions := slices.Collect(maps.Keys(refs))
 	slices.SortFunc(versions, cmpVersionDesc)
 
@@ -90,22 +93,42 @@ func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, 
 	// already hashed, avoiding redundant I/O and hashing.
 	seenBlobs := make(map[plumbing.Hash]struct{})
 
+	// Collect replace entries from composer.json across all versions.
+	replaceSet := make(map[string]struct{})
+
 	for _, version := range versions {
-		if err := indexRef(repo, version, refs[version], db, opts, seenBlobs); err != nil {
+		tree, err := indexRef(repo, version, refs[version], db, opts, seenBlobs)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping %s (%s): %v\n", version, refs[version][:minLen(refs[version], 12)], err)
+			continue
+		}
+
+		// Read composer.json from the tree root to extract replace entries.
+		if tree != nil {
+			if f, fErr := tree.File("composer.json"); fErr == nil {
+				if content, cErr := f.Contents(); cErr == nil {
+					if pkgs, pErr := composer.ParseReplace([]byte(content)); pErr == nil {
+						for _, pkg := range pkgs {
+							replaceSet[pkg] = struct{}{}
+						}
+					}
+				}
+			}
 		}
 	}
+
+	return slices.Collect(maps.Keys(replaceSet))
 }
 
-func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) error {
+func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (*object.Tree, error) {
 	commit, err := repo.CommitObject(plumbing.NewHash(ref))
 	if err != nil {
-		return fmt.Errorf("resolving commit: %w", err)
+		return nil, fmt.Errorf("resolving commit: %w", err)
 	}
 
 	tree, err := commit.Tree()
 	if err != nil {
-		return fmt.Errorf("getting tree: %w", err)
+		return nil, fmt.Errorf("getting tree: %w", err)
 	}
 
 	var newHashes, totalHashes, skippedFiles int
@@ -135,7 +158,10 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 		opts.OnVersionDone(version)
 	}
 
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return tree, nil
 }
 
 func (opts IndexOptions) log(level int, format string, args ...any) {

@@ -3,6 +3,7 @@ package composer
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -165,6 +166,76 @@ func TestParseProject_NoLock(t *testing.T) {
 	_, err := ParseProject(filepath.Join(dir, "composer.json"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "composer.lock")
+}
+
+func TestParseReplace(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    []string
+		wantErr bool
+	}{
+		{
+			name: "magento2 style",
+			input: `{
+				"name": "magento/magento2ce",
+				"replace": {
+					"magento/module-catalog": "*",
+					"magento/module-checkout": "*",
+					"magento/module-sales": "*"
+				}
+			}`,
+			want: []string{"magento/module-catalog", "magento/module-checkout", "magento/module-sales"},
+		},
+		{
+			name:  "empty replace",
+			input: `{"name": "vendor/pkg", "replace": {}}`,
+			want:  nil,
+		},
+		{
+			name:  "no replace section",
+			input: `{"name": "vendor/pkg"}`,
+			want:  nil,
+		},
+		{
+			name: "filters non-package entries",
+			input: `{
+				"replace": {
+					"magento/module-catalog": "*",
+					"not-a-package": "*"
+				}
+			}`,
+			want: []string{"magento/module-catalog"},
+		},
+		{
+			name: "self.version constraint",
+			input: `{
+				"replace": {
+					"symfony/polyfill-php80": "self.version"
+				}
+			}`,
+			want: []string{"symfony/polyfill-php80"},
+		},
+		{
+			name:    "invalid json",
+			input:   `{not valid`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseReplace([]byte(tt.input))
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			slices.Sort(got)
+			slices.Sort(tt.want)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestNormalizeRepoURL(t *testing.T) {

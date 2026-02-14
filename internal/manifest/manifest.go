@@ -9,13 +9,15 @@ import (
 	"syscall"
 )
 
-// Manifest tracks which package@version pairs have been indexed.
-// It is backed by an append-only text file with one entry per line.
+// Manifest tracks which package@version pairs have been indexed and which
+// packages are replaced by a monorepo. Backed by an append-only text file.
+// Indexed entries use "package@version" format; replace entries use "replace:package" format.
 type Manifest struct {
-	mu      sync.Mutex
-	path    string
-	indexed map[string]struct{} // "package@version"
-	file    *os.File            // kept open for flock
+	mu       sync.Mutex
+	path     string
+	indexed  map[string]struct{} // "package@version"
+	replaced map[string]struct{} // "package-name" (no version)
+	file     *os.File            // kept open for flock
 }
 
 // PathFromDB derives the manifest path from a database path.
@@ -41,13 +43,18 @@ func Load(path string) (*Manifest, error) {
 	}
 
 	indexed := make(map[string]struct{})
+	replaced := make(map[string]struct{})
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if line == "" || !strings.Contains(line, "@") {
+		if line == "" {
 			continue
 		}
-		indexed[line] = struct{}{}
+		if pkg, ok := strings.CutPrefix(line, "replace:"); ok {
+			replaced[pkg] = struct{}{}
+		} else if strings.Contains(line, "@") {
+			indexed[line] = struct{}{}
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		f.Close()
@@ -55,9 +62,10 @@ func Load(path string) (*Manifest, error) {
 	}
 
 	return &Manifest{
-		path:    path,
-		indexed: indexed,
-		file:    f,
+		path:     path,
+		indexed:  indexed,
+		replaced: replaced,
+		file:     f,
 	}, nil
 }
 
@@ -85,6 +93,31 @@ func (m *Manifest) MarkIndexed(pkg, version string) error {
 		return fmt.Errorf("writing to manifest: %w", err)
 	}
 	m.indexed[key] = struct{}{}
+	return nil
+}
+
+// IsReplaced reports whether the given package is replaced by a monorepo.
+func (m *Manifest) IsReplaced(pkg string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.replaced[pkg]
+	return ok
+}
+
+// MarkReplaced records that a package is replaced by a monorepo.
+// The entry is appended to the file immediately.
+func (m *Manifest) MarkReplaced(pkg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.replaced[pkg]; ok {
+		return nil // already recorded
+	}
+
+	if _, err := fmt.Fprintln(m.file, "replace:"+pkg); err != nil {
+		return fmt.Errorf("writing to manifest: %w", err)
+	}
+	m.replaced[pkg] = struct{}{}
 	return nil
 }
 

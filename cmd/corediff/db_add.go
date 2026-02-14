@@ -130,6 +130,62 @@ func (a *dbAddArg) buildHTTPClient(opts *gitindex.IndexOptions) (*http.Client, e
 	return nil, nil
 }
 
+// indexVersions tries git clone for all versions, falling back to zip per version.
+// OnVersionDone (if set in opts) is called after each successfully indexed version.
+// Returns the list of packages declared in composer.json "replace" sections (if any).
+func (a *dbAddArg) indexVersions(pkg string, versions []packagist.Version, db *hashdb.HashDB, opts gitindex.IndexOptions) []string {
+	if len(versions) == 0 {
+		return nil
+	}
+
+	// Try git source if available, fall back to zip
+	useZip := true
+	if versions[0].Source.Type == "git" {
+		repoURL := versions[0].Source.URL
+		refs := make(map[string]string, len(versions))
+		for _, v := range versions {
+			if v.Source.Reference != "" {
+				refs[v.Version] = v.Source.Reference
+			}
+		}
+
+		logVerbose(fmt.Sprintf("  cloning %s", repoURL))
+
+		var replaces []string
+		var gitErr error
+		if dbCommand.CacheDir != "" {
+			cloneDir := filepath.Join(dbCommand.CacheDir, "git", sanitizePath(pkg))
+			if err := os.MkdirAll(cloneDir, 0o755); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: creating cache dir for %s: %v\n", pkg, err)
+			} else {
+				replaces, gitErr = gitindex.CloneAndIndexWithDir(repoURL, cloneDir, refs, db, opts)
+			}
+		} else {
+			replaces, gitErr = gitindex.CloneAndIndex(repoURL, refs, db, opts)
+		}
+		if gitErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: git clone failed for %s: %v, falling back to zip\n", pkg, gitErr)
+		} else {
+			return replaces
+		}
+	}
+
+	if useZip {
+		for _, v := range versions {
+			if v.Dist.URL == "" {
+				continue
+			}
+			logVerbose(fmt.Sprintf("  downloading %s (%s)", v.Version, v.Dist.URL))
+			if err := gitindex.IndexZip(v.Dist.URL, db, opts); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: skipping %s %s: %v\n", pkg, v.Version, err)
+			} else if opts.OnVersionDone != nil {
+				opts.OnVersionDone(v.Version)
+			}
+		}
+	}
+	return nil
+}
+
 // indexPackage fetches versions for pkg from repoURL and indexes them into db.
 func (a *dbAddArg) indexPackage(pkg, repoURL string, httpClient *http.Client, db *hashdb.HashDB, opts gitindex.IndexOptions) error {
 	c := &packagist.Client{BaseURL: repoURL, HTTP: httpClient}
@@ -142,49 +198,7 @@ func (a *dbAddArg) indexPackage(pkg, repoURL string, httpClient *http.Client, db
 	logVerbose(fmt.Sprintf("Found %d versions for %s", len(versions), pkg))
 
 	opts.PathPrefix = "vendor/" + pkg + "/"
-
-	// Try git source if available, fall back to zip
-	useZip := true
-	if len(versions) > 0 && versions[0].Source.Type == "git" {
-		repoURL := versions[0].Source.URL
-		refs := make(map[string]string, len(versions))
-		for _, v := range versions {
-			if v.Source.Reference != "" {
-				refs[v.Version] = v.Source.Reference
-			}
-		}
-
-		logVerbose(fmt.Sprintf("  cloning %s", repoURL))
-
-		var gitErr error
-		if dbCommand.CacheDir != "" {
-			cloneDir := filepath.Join(dbCommand.CacheDir, "git", sanitizePath(pkg))
-			if err := os.MkdirAll(cloneDir, 0o755); err != nil {
-				return fmt.Errorf("creating cache dir: %w", err)
-			}
-			gitErr = gitindex.CloneAndIndexWithDir(repoURL, cloneDir, refs, db, opts)
-		} else {
-			gitErr = gitindex.CloneAndIndex(repoURL, refs, db, opts)
-		}
-		if gitErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: git clone failed: %v, falling back to zip\n", gitErr)
-		} else {
-			useZip = false
-		}
-	}
-
-	if useZip {
-		for _, v := range versions {
-			if v.Dist.URL == "" {
-				continue
-			}
-			logVerbose(fmt.Sprintf("  downloading %s (%s)", v.Version, v.Dist.URL))
-			if err := gitindex.IndexZip(v.Dist.URL, db, opts); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", v.Version, err)
-			}
-		}
-	}
-
+	a.indexVersions(pkg, versions, db, opts)
 	return nil
 }
 
@@ -255,48 +269,14 @@ func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *manife
 		}
 	}
 
-	// Try git source if available, fall back to zip
-	useZip := true
-	if len(versions) > 0 && versions[0].Source.Type == "git" {
-		repoURL := versions[0].Source.URL
-		refs := make(map[string]string, len(versions))
-		for _, v := range versions {
-			if v.Source.Reference != "" {
-				refs[v.Version] = v.Source.Reference
-			}
-		}
-
-		logVerbose(fmt.Sprintf("  cloning %s", repoURL))
-
-		var gitErr error
-		if dbCommand.CacheDir != "" {
-			cloneDir := filepath.Join(dbCommand.CacheDir, "git", sanitizePath(pkg))
-			if err := os.MkdirAll(cloneDir, 0o755); err != nil {
-				return fmt.Errorf("creating cache dir: %w", err)
-			}
-			gitErr = gitindex.CloneAndIndexWithDir(repoURL, cloneDir, refs, db, opts)
-		} else {
-			gitErr = gitindex.CloneAndIndex(repoURL, refs, db, opts)
-		}
-		if gitErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: git clone failed: %v, falling back to zip\n", gitErr)
-		} else {
-			useZip = false
+	replaces := a.indexVersions(pkg, versions, db, opts)
+	for _, r := range replaces {
+		if err := mf.MarkReplaced(r); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
 		}
 	}
-
-	if useZip {
-		for _, v := range versions {
-			if v.Dist.URL == "" {
-				continue
-			}
-			logVerbose(fmt.Sprintf("  downloading %s (%s)", v.Version, v.Dist.URL))
-			if err := gitindex.IndexZip(v.Dist.URL, db, opts); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", v.Version, err)
-			} else {
-				opts.OnVersionDone(v.Version)
-			}
-		}
+	if len(replaces) > 0 {
+		fmt.Printf("Recorded %d replaced packages in manifest\n", len(replaces))
 	}
 
 	newHashes := db.Len() - oldSize
@@ -324,20 +304,30 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manifes
 		return err
 	}
 
-	// Filter out already-indexed packages
+	// Filter out already-indexed and replaced packages
 	var newPkgs []composer.LockPackage
-	var skipped int
+	var skipped, replaced int
 	for _, pkg := range proj.Packages {
 		if mf.IsIndexed(pkg.Name, pkg.Version) {
 			skipped++
+		} else if mf.IsReplaced(pkg.Name) {
+			replaced++
 		} else {
 			newPkgs = append(newPkgs, pkg)
 		}
 	}
 
 	fmt.Printf("Found %d packages across %d repositories", len(proj.Packages), len(proj.Repos))
-	if skipped > 0 {
-		fmt.Printf(" (%d already indexed)", skipped)
+	if skipped > 0 || replaced > 0 {
+		fmt.Printf(" (")
+		parts := []string{}
+		if skipped > 0 {
+			parts = append(parts, fmt.Sprintf("%d already indexed", skipped))
+		}
+		if replaced > 0 {
+			parts = append(parts, fmt.Sprintf("%d replaced by monorepo", replaced))
+		}
+		fmt.Printf("%s)", strings.Join(parts, ", "))
 	}
 	fmt.Println()
 
@@ -455,46 +445,10 @@ func (a *dbAddArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifest.
 			}
 
 			pkgDB := hashdb.New()
-
-			// Try git source if available, fall back to zip
-			useZip := true
-			if newVersions[0].Source.Type == "git" {
-				repoURL := newVersions[0].Source.URL
-				refs := make(map[string]string, len(newVersions))
-				for _, v := range newVersions {
-					if v.Source.Reference != "" {
-						refs[v.Version] = v.Source.Reference
-					}
-				}
-
-				var gitErr error
-				if dbCommand.CacheDir != "" {
-					cloneDir := filepath.Join(dbCommand.CacheDir, "git", sanitizePath(pkg))
-					if err := os.MkdirAll(cloneDir, 0o755); err != nil {
-						fmt.Fprintf(os.Stderr, "warning: creating cache dir for %s: %v\n", pkg, err)
-					} else {
-						gitErr = gitindex.CloneAndIndexWithDir(repoURL, cloneDir, refs, pkgDB, pkgOpts)
-					}
-				} else {
-					gitErr = gitindex.CloneAndIndex(repoURL, refs, pkgDB, pkgOpts)
-				}
-				if gitErr != nil {
-					fmt.Fprintf(os.Stderr, "warning: git clone failed for %s: %v, trying zip\n", pkg, gitErr)
-				} else {
-					useZip = false
-				}
-			}
-
-			if useZip {
-				for _, v := range newVersions {
-					if v.Dist.URL == "" {
-						continue
-					}
-					if err := gitindex.IndexZip(v.Dist.URL, pkgDB, pkgOpts); err != nil {
-						fmt.Fprintf(os.Stderr, "warning: skipping %s %s: %v\n", pkg, v.Version, err)
-					} else {
-						pkgOpts.OnVersionDone(v.Version)
-					}
+			replaces := a.indexVersions(pkg, newVersions, pkgDB, pkgOpts)
+			for _, r := range replaces {
+				if err := mf.MarkReplaced(r); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
 				}
 			}
 
@@ -520,36 +474,10 @@ func (a *dbAddArg) indexComposerPackage(pkg composer.LockPackage, repos []compos
 	fmt.Printf("Indexing %s (%s)\n", pkg.Name, pkg.Version)
 	opts.PathPrefix = "vendor/" + pkg.Name + "/"
 
-	// Use source/dist from lock file directly — no need to query repos
-	if pkg.Source.Type == "git" && pkg.Source.URL != "" {
-		refs := map[string]string{pkg.Name: pkg.Source.Reference}
-
-		logVerbose(fmt.Sprintf("  cloning %s (%s)", pkg.Name, pkg.Source.URL))
-
-		var gitErr error
-		if dbCommand.CacheDir != "" {
-			cloneDir := filepath.Join(dbCommand.CacheDir, "git", sanitizePath(pkg.Name))
-			if err := os.MkdirAll(cloneDir, 0o755); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: creating cache dir for %s: %v\n", pkg.Name, err)
-			} else {
-				gitErr = gitindex.CloneAndIndexWithDir(pkg.Source.URL, cloneDir, refs, db, opts)
-			}
-		} else {
-			gitErr = gitindex.CloneAndIndex(pkg.Source.URL, refs, db, opts)
-		}
-		if gitErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: git clone failed for %s: %v, trying zip\n", pkg.Name, gitErr)
-		} else {
-			return
-		}
-	}
-
-	// Fall back to dist zip from lock file
-	if pkg.Dist.URL != "" {
-		logVerbose(fmt.Sprintf("  downloading %s (%s)", pkg.Name, pkg.Dist.URL))
-		if err := gitindex.IndexZip(pkg.Dist.URL, db, opts); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", pkg.Name, err)
-		}
+	// Convert lock file source/dist to packagist.Version for indexVersions
+	if pkg.Source.URL != "" || pkg.Dist.URL != "" {
+		v := lockToVersion(pkg)
+		a.indexVersions(pkg.Name, []packagist.Version{v}, db, opts)
 		return
 	}
 
@@ -560,6 +488,19 @@ func (a *dbAddArg) indexComposerPackage(pkg composer.LockPackage, repos []compos
 		}
 	}
 	fmt.Fprintf(os.Stderr, "warning: package %s not found in any repository\n", pkg.Name)
+}
+
+// lockToVersion converts a composer lock package to a packagist.Version.
+func lockToVersion(pkg composer.LockPackage) packagist.Version {
+	var v packagist.Version
+	v.Version = pkg.Version
+	v.Source.Type = pkg.Source.Type
+	v.Source.URL = pkg.Source.URL
+	v.Source.Reference = pkg.Source.Reference
+	v.Dist.Type = pkg.Dist.Type
+	v.Dist.URL = pkg.Dist.URL
+	v.Dist.Reference = pkg.Dist.Reference
+	return v
 }
 
 func (a *dbAddArg) executeLocalPaths(db *hashdb.HashDB, dbPath string) error {
