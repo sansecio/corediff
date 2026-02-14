@@ -84,14 +84,20 @@ func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *
 func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) {
 	versions := slices.Collect(maps.Keys(refs))
 	slices.SortFunc(versions, cmpVersionDesc)
+
+	// Track blob hashes across versions to skip unchanged files.
+	// Versions are processed newest-first; subsequent versions skip blobs
+	// already hashed, avoiding redundant I/O and hashing.
+	seenBlobs := make(map[plumbing.Hash]struct{})
+
 	for _, version := range versions {
-		if err := indexRef(repo, version, refs[version], db, opts); err != nil {
+		if err := indexRef(repo, version, refs[version], db, opts, seenBlobs); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping %s (%s): %v\n", version, refs[version][:minLen(refs[version], 12)], err)
 		}
 	}
 }
 
-func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions) error {
+func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) error {
 	commit, err := repo.CommitObject(plumbing.NewHash(ref))
 	if err != nil {
 		return fmt.Errorf("resolving commit: %w", err)
@@ -102,11 +108,14 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 		return fmt.Errorf("getting tree: %w", err)
 	}
 
-	var newHashes, totalHashes int
+	var newHashes, totalHashes, skippedFiles int
 	start := time.Now()
 
 	err = tree.Files().ForEach(func(f *object.File) error {
-		n, t := indexFileCount(f, db, opts)
+		n, t := indexFileCount(f, db, opts, seenBlobs)
+		if n == 0 && t == 0 {
+			skippedFiles++
+		}
 		newHashes += n
 		totalHashes += t
 		return nil
@@ -116,7 +125,11 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 	rate := float64(totalHashes) / max(elapsed.Seconds(), 0.001)
 
 	pkg := strings.TrimSuffix(strings.TrimPrefix(opts.PathPrefix, "vendor/"), "/")
-	opts.log(1, "  indexed %s@%s (%d new, %d total, %.0f hash/sec)", pkg, version, newHashes, totalHashes, rate)
+	if skippedFiles > 0 {
+		opts.log(1, "  indexed %s@%s (%d new, %d total, %d files skipped, %.0f hash/sec)", pkg, version, newHashes, totalHashes, skippedFiles, rate)
+	} else {
+		opts.log(1, "  indexed %s@%s (%d new, %d total, %.0f hash/sec)", pkg, version, newHashes, totalHashes, rate)
+	}
 
 	if err == nil && opts.OnVersionDone != nil {
 		opts.OnVersionDone(version)
@@ -151,10 +164,18 @@ func (opts IndexOptions) InstallHTTPTransport() {
 }
 
 // indexFileCount indexes a single file and returns (new hashes added, total hashes processed).
-func indexFileCount(f *object.File, db *hashdb.HashDB, opts IndexOptions) (int, int) {
+// seenBlobs tracks git blob hashes already processed; unchanged files across versions are skipped.
+func indexFileCount(f *object.File, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (int, int) {
 	if !opts.AllValidText && !normalize.HasValidExt(f.Name) {
 		opts.log(3, "    skip %s (no valid ext)", f.Name)
 		return 0, 0
+	}
+
+	// Skip if this exact blob content was already processed in a previous version.
+	if seenBlobs != nil {
+		if _, seen := seenBlobs[f.Hash]; seen {
+			return 0, 0
+		}
 	}
 
 	// Check UTF-8 validity by reading first 8KB
@@ -171,6 +192,9 @@ func indexFileCount(f *object.File, db *hashdb.HashDB, opts IndexOptions) (int, 
 	}
 	if !utf8.Valid(buf[:n]) {
 		opts.log(3, "    skip %s (invalid utf8)", f.Name)
+		if seenBlobs != nil {
+			seenBlobs[f.Hash] = struct{}{} // don't re-check in later versions
+		}
 		return 0, 0
 	}
 
@@ -196,7 +220,14 @@ func indexFileCount(f *object.File, db *hashdb.HashDB, opts IndexOptions) (int, 
 			fmt.Println(fmt.Sprintf(format, args...))
 		}
 	}
-	return normalize.HashReader(reader, db, lineLogf)
+	added, total := normalize.HashReader(reader, db, lineLogf)
+
+	// Mark blob as processed so subsequent versions skip it
+	if seenBlobs != nil {
+		seenBlobs[f.Hash] = struct{}{}
+	}
+
+	return added, total
 }
 
 func minLen(s string, n int) int {

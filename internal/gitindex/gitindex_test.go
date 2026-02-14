@@ -262,6 +262,84 @@ func TestIntegration_PsrLog(t *testing.T) {
 	assert.Greater(t, db.Len(), 10, "expected at least 10 hashes from psr/log")
 }
 
+// createTestRepoMultiVersion creates a git repo with multiple commits.
+// Each entry in versions is a map of files for that commit.
+// Returns repo path and a map of version→commit hash.
+func createTestRepoMultiVersion(t *testing.T, versions map[string]map[string]string) (string, map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	refs := make(map[string]string)
+	for version, files := range versions {
+		for name, content := range files {
+			path := dir + "/" + name
+			require.NoError(t, os.MkdirAll(dir+"/"+dirOf(name), 0o755))
+			require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+			_, err := wt.Add(name)
+			require.NoError(t, err)
+		}
+		hash, err := wt.Commit("version "+version, &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  "test",
+				Email: "test@test.com",
+				When:  time.Now(),
+			},
+		})
+		require.NoError(t, err)
+		refs[version] = hash.String()
+	}
+	return dir, refs
+}
+
+func TestCloneAndIndex_BlobDedup(t *testing.T) {
+	// Create two versions: v2 changes only one file, the rest are identical.
+	versions := map[string]map[string]string{
+		"1.0.0": {
+			"index.php":      "<?php\necho 'hello';\n",
+			"lib/helper.php": "<?php\nfunction foo() { return 1; }\n",
+			"lib/utils.php":  "<?php\nfunction bar() { return 2; }\n",
+		},
+		"2.0.0": {
+			"index.php":      "<?php\necho 'hello world';\n", // changed
+			"lib/helper.php": "<?php\nfunction foo() { return 1; }\n", // unchanged
+			"lib/utils.php":  "<?php\nfunction bar() { return 2; }\n", // unchanged
+		},
+	}
+	repoPath, refs := createTestRepoMultiVersion(t, versions)
+
+	// Index both versions — blob dedup should skip unchanged files
+	db := hashdb.New()
+	err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
+	require.NoError(t, err)
+	assert.Greater(t, db.Len(), 0)
+
+	// All line hashes from both versions should be present
+	for _, h := range normalize.HashLine([]byte("echo 'hello';")) {
+		assert.True(t, db.Contains(h))
+	}
+	for _, h := range normalize.HashLine([]byte("echo 'hello world';")) {
+		assert.True(t, db.Contains(h))
+	}
+	for _, h := range normalize.HashLine([]byte("function foo() { return 1; }")) {
+		assert.True(t, db.Contains(h))
+	}
+
+	// Verify by comparing against indexing each version separately (no dedup)
+	dbSeparate := hashdb.New()
+	err = CloneAndIndex(repoPath, map[string]string{"1.0.0": refs["1.0.0"]}, dbSeparate, IndexOptions{})
+	require.NoError(t, err)
+	err = CloneAndIndex(repoPath, map[string]string{"2.0.0": refs["2.0.0"]}, dbSeparate, IndexOptions{})
+	require.NoError(t, err)
+
+	// Both approaches should produce the same hashes
+	assert.Equal(t, dbSeparate.Len(), db.Len(), "blob dedup should produce same result as separate indexing")
+}
+
 func TestCmpVersionDesc(t *testing.T) {
 	versions := []string{"1.0.0", "3.255.8", "3.49.0", "3.356.10", "v2.1.0", "3.103.2-p3", "3.103.2"}
 	slices.SortFunc(versions, cmpVersionDesc)
