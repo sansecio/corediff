@@ -74,7 +74,7 @@ func TestCloneAndIndex(t *testing.T) {
 	err := CloneAndIndex(repoPath, refs, db, IndexOptions{})
 	require.NoError(t, err)
 
-	db.Compact()
+
 	assert.Greater(t, db.Len(), 0)
 
 	// Path hashes should be present (NoPlatform=false)
@@ -99,7 +99,7 @@ func TestCloneAndIndex_PathPrefix(t *testing.T) {
 	err := CloneAndIndex(repoPath, refs, db, IndexOptions{PathPrefix: "vendor/acme/pkg/"})
 	require.NoError(t, err)
 
-	db.Compact()
+
 	// Path hash should use the prefix
 	assert.True(t, db.Contains(normalize.PathHash("vendor/acme/pkg/src/Foo.php")))
 	// Bare path should NOT be present
@@ -118,7 +118,7 @@ func TestCloneAndIndex_NoPlatform(t *testing.T) {
 	err := CloneAndIndex(repoPath, refs, db, IndexOptions{NoPlatform: true})
 	require.NoError(t, err)
 
-	db.Compact()
+
 	assert.Greater(t, db.Len(), 0)
 
 	// With NoPlatform, path hashes should NOT be present
@@ -136,13 +136,13 @@ func TestCloneAndIndex_AllValidText(t *testing.T) {
 	db1 := hashdb.New()
 	err := CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db1, IndexOptions{})
 	require.NoError(t, err)
-	db1.Compact()
+
 
 	// With AllValidText, readme.txt should be included
 	db2 := hashdb.New()
 	err = CloneAndIndex(repoPath, map[string]string{"v1": commitHash}, db2, IndexOptions{AllValidText: true})
 	require.NoError(t, err)
-	db2.Compact()
+
 
 	assert.Greater(t, db2.Len(), db1.Len())
 }
@@ -178,7 +178,7 @@ func TestIndexZip(t *testing.T) {
 	err := IndexZip(srv.URL+"/test.zip", db, IndexOptions{})
 	require.NoError(t, err)
 
-	db.Compact()
+
 	assert.Greater(t, db.Len(), 0)
 
 	// Path hashes should be present (without the root prefix)
@@ -208,7 +208,7 @@ func TestIndexZip_NoPlatform(t *testing.T) {
 	err := IndexZip(srv.URL+"/test.zip", db, IndexOptions{NoPlatform: true})
 	require.NoError(t, err)
 
-	db.Compact()
+
 	assert.Greater(t, db.Len(), 0)
 	assert.False(t, db.Contains(normalize.PathHash("index.php")))
 }
@@ -256,7 +256,7 @@ func TestIntegration_PsrLog(t *testing.T) {
 	err = CloneAndIndex(versions[0].Source.URL, refs, db, IndexOptions{AllValidText: true, NoPlatform: true})
 	require.NoError(t, err)
 
-	db.Compact()
+
 	t.Logf("Indexed %d hashes from psr/log", db.Len())
 	assert.Greater(t, db.Len(), 10, "expected at least 10 hashes from psr/log")
 }

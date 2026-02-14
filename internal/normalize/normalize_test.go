@@ -47,7 +47,7 @@ func TestHashReader(t *testing.T) {
 		input := "echo 'hello';\necho 'hello';\n"
 		n := HashReader(strings.NewReader(input), db, nil)
 		// First line adds hash(es), second is duplicate
-		db.Compact()
+
 		assert.Greater(t, n, 0)
 		// All hashes from first line should already exist for second
 		assert.Equal(t, len(HashLine([]byte("echo 'hello';"))), db.Len())

@@ -16,11 +16,10 @@ func (a *dbInfoArg) Execute(_ []string) error {
 		return fmt.Errorf("stat %s: %w", dbPath, err)
 	}
 
-	db, err := hashdb.OpenReadOnly(dbPath)
+	db, err := hashdb.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", dbPath, err)
 	}
-	defer db.Close()
 
 	fmt.Printf("Database:  %s\n", dbPath)
 	fmt.Printf("Format:    CDDB v1\n")

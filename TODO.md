@@ -8,7 +8,7 @@ corediff scan /var/www/magento                       # scan with default DB
 corediff scan -s /var/www/magento                    # suspect lines only
 corediff scan -i /var/www/magento                    # ignore paths, scan everything
 corediff scan -d custom.db /var/www/magento          # scan with specific DB
-corediff scan -vv < suspicious-file.php              # debug: show hash for each line
+corediff scan -vv suspicious-file.php              # debug: show hash for each line
 
 # Indexing — building the hash database
 corediff db add --composer /var/www/magento           # index full install (all deps from lock file)
@@ -33,7 +33,7 @@ Single binary with two top-level subcommands. `scan` is the default
 - [x] Scan files/dirs against hash DB
 - [x] `-vv` flag: show hash for each input line (debugging, reads from files or stdin)
 - [ ] Default DB: `$XDG_DATA_HOME/corediff/default.db`. Override with `-d <path>`.
-- [ ] Error on first run if no DB exists, point user to `corediff db add`.
+- [ ] Error on first run if no DB exists.
 - [ ] Single file argument: auto-skip app root check
 - [ ] Exit codes: 0=clean, 1=unrecognized lines, 2=suspect lines, >2=error
 

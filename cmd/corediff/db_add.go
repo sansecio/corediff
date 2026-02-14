@@ -51,7 +51,7 @@ func (a *dbAddArg) Execute(_ []string) error {
 	applyVerbose()
 
 	dbPath := dbCommand.Database
-	db, err := hashdb.OpenReadWrite(dbPath)
+	db, err := hashdb.Open(dbPath)
 	if os.IsNotExist(err) {
 		db = hashdb.New()
 		err = nil
@@ -264,7 +264,6 @@ func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string) error {
 		}
 	}
 
-	db.Compact()
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
 		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
@@ -321,7 +320,6 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string) error {
 
 	wg.Wait()
 
-	db.Compact()
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
 		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
@@ -396,7 +394,6 @@ func (a *dbAddArg) executeLocalPaths(db *hashdb.HashDB, dbPath string) error {
 		fmt.Println()
 	}
 
-	db.Compact()
 	if db.Len() != oldSize {
 		fmt.Println("Computed", db.Len()-oldSize, "new hashes, saving to", dbPath, "..")
 		return db.Save(dbPath)

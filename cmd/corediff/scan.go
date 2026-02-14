@@ -59,11 +59,10 @@ func (s *scanArg) Execute(_ []string) error {
 	}
 	s.validate()
 
-	db, err := hashdb.OpenReadOnly(s.Database)
+	db, err := hashdb.Open(s.Database)
 	if err != nil {
 		log.Fatal("Error loading database:", err)
 	}
-	defer db.Close()
 
 	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", db.Len(), " precomputed hashes. (C) 2023-2026 Willem de Groot"))
 	fmt.Println("Using database:", s.Database)

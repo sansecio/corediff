@@ -17,7 +17,7 @@ import (
 func TestDBAdd(t *testing.T) {
 	db := hashdb.New()
 	addPath("../../fixture/docroot", db, false, false, false)
-	db.Compact()
+	
 
 	// Should have line hashes
 	assert.Greater(t, db.Len(), 0)
@@ -31,11 +31,11 @@ func TestDBAdd(t *testing.T) {
 func TestDBAddNoPlatform(t *testing.T) {
 	dbWith := hashdb.New()
 	addPath("../../fixture/docroot", dbWith, false, false, false)
-	dbWith.Compact()
+	
 
 	dbWithout := hashdb.New()
 	addPath("../../fixture/docroot", dbWithout, false, false, true)
-	dbWithout.Compact()
+	
 
 	// noPlatform=true should have fewer hashes (no path hashes)
 	assert.Greater(t, dbWith.Len(), dbWithout.Len())
@@ -72,9 +72,9 @@ func TestDBMerge(t *testing.T) {
 	require.NoError(t, mergeArg.Execute(nil))
 
 	// Verify merged DB
-	merged, err := hashdb.OpenReadOnly(outPath)
+	merged, err := hashdb.Open(outPath)
 	require.NoError(t, err)
-	defer merged.Close()
+
 
 	assert.Equal(t, 4, merged.Len()) // 100, 200, 300, 400 (deduped)
 	assert.True(t, merged.Contains(100))
@@ -92,9 +92,9 @@ func TestDBSaveAndReopen(t *testing.T) {
 	require.NoError(t, db.Save(dbPath))
 
 	// Verify it can be reopened
-	loaded, err := hashdb.OpenReadOnly(dbPath)
+	loaded, err := hashdb.Open(dbPath)
 	require.NoError(t, err)
-	defer loaded.Close()
+
 	assert.Greater(t, loaded.Len(), 0)
 }
 
@@ -205,9 +205,9 @@ func TestDBAdd_DatabaseOnParent(t *testing.T) {
 	require.NoError(t, arg.Execute(nil))
 
 	// Verify database was created using parent's Database path
-	db, err := hashdb.OpenReadOnly(dbPath)
+	db, err := hashdb.Open(dbPath)
 	require.NoError(t, err)
-	defer db.Close()
+
 	assert.Greater(t, db.Len(), 0)
 }
 
