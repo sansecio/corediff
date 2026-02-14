@@ -73,9 +73,6 @@ func readDB(path string) ([]uint64, error) {
 	if size == 0 {
 		return nil, nil
 	}
-	if size < headerSize {
-		return nil, fmt.Errorf("file too small for CDDB header")
-	}
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -83,12 +80,35 @@ func readDB(path string) ([]uint64, error) {
 	}
 	defer f.Close()
 
+	// Detect format: check for CDDB magic header
+	var magic [4]byte
+	if size >= 4 {
+		if _, err := f.Read(magic[:]); err != nil {
+			return nil, fmt.Errorf("reading magic: %w", err)
+		}
+	}
+
+	if string(magic[:]) == dbMagic {
+		return readCDDB(f, size)
+	}
+
+	// Legacy format: raw sequential little-endian uint64s
+	return readLegacy(f, size)
+}
+
+func readCDDB(f *os.File, size int64) ([]uint64, error) {
+	if size < headerSize {
+		return nil, fmt.Errorf("file too small for CDDB header")
+	}
+
+	// Seek back to start to read full header
+	if _, err := f.Seek(0, 0); err != nil {
+		return nil, err
+	}
+
 	var hdr dbHeader
 	if err := binary.Read(f, binary.LittleEndian, &hdr); err != nil {
 		return nil, fmt.Errorf("reading header: %w", err)
-	}
-	if string(hdr.Magic[:]) != dbMagic {
-		return nil, fmt.Errorf("not a CDDB file (bad magic)")
 	}
 	if hdr.Version != dbVersion {
 		return nil, fmt.Errorf("unsupported database version %d (max supported: %d)", hdr.Version, dbVersion)
@@ -104,6 +124,24 @@ func readDB(path string) ([]uint64, error) {
 	data := make([]uint64, count)
 	if err := binary.Read(f, binary.LittleEndian, data); err != nil {
 		return nil, fmt.Errorf("reading data: %w", err)
+	}
+	return data, nil
+}
+
+func readLegacy(f *os.File, size int64) ([]uint64, error) {
+	if size%8 != 0 {
+		return nil, fmt.Errorf("invalid legacy database size (%d bytes, not a multiple of 8)", size)
+	}
+
+	// Seek back to start — we already read 4 bytes for magic detection
+	if _, err := f.Seek(0, 0); err != nil {
+		return nil, err
+	}
+
+	count := size / 8
+	data := make([]uint64, count)
+	if err := binary.Read(f, binary.LittleEndian, data); err != nil {
+		return nil, fmt.Errorf("reading legacy data: %w", err)
 	}
 	return data, nil
 }

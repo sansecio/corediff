@@ -102,18 +102,32 @@ func TestSaveDeduplication(t *testing.T) {
 func TestCorruptFile(t *testing.T) {
 	dir := t.TempDir()
 
-	// File too small for header
+	// File size not a multiple of 8 (invalid for both formats)
 	path := filepath.Join(dir, "corrupt.db")
 	require.NoError(t, os.WriteFile(path, []byte("hello"), 0644))
 	_, err := Open(path)
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a multiple of 8")
+}
 
-	// File with bad magic
-	path2 := filepath.Join(dir, "badmagic.db")
-	require.NoError(t, os.WriteFile(path2, make([]byte, 24), 0644))
-	_, err = Open(path2)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "bad magic")
+func TestLegacyFormat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "legacy.db")
+
+	// Write raw sequential uint64s (no header)
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	hashes := []uint64{42, 100, 1}
+	require.NoError(t, binary.Write(f, binary.LittleEndian, hashes))
+	require.NoError(t, f.Close())
+
+	db, err := Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, 3, db.Len())
+	assert.True(t, db.Contains(42))
+	assert.True(t, db.Contains(100))
+	assert.True(t, db.Contains(1))
+	assert.False(t, db.Contains(99))
 }
 
 func TestVersionMismatch(t *testing.T) {
