@@ -3,8 +3,13 @@ package gitindex
 import (
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/go-git/go-git/v5"
@@ -18,12 +23,12 @@ import (
 
 // IndexOptions controls how files are indexed.
 type IndexOptions struct {
-	NoPlatform   bool
-	AllValidText bool
-	PathPrefix   string                           // prepended to file paths for path hashes (e.g. "vendor/psr/log/")
-	Logf         func(format string, args ...any) // optional file-level logger (-vv)
-	LineLogf     func(format string, args ...any) // optional line-level logger (-vvv)
-	HTTP         *http.Client                     // optional; defaults to http.DefaultClient
+	NoPlatform      bool
+	AllValidText    bool
+	PathPrefix      string            // prepended to file paths for path hashes (e.g. "vendor/psr/log/")
+	Verbose         int               // verbosity level: 1=-v (versions), 3=-vvv (files), 4=-vvvv (lines)
+	HTTP            *http.Client      // optional; defaults to http.DefaultClient
+	OnVersionDone   func(version string) // called after each version is indexed (for manifest updates)
 }
 
 // CloneAndIndex bare-clones repoURL, then for each version→ref pair,
@@ -44,12 +49,7 @@ func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, op
 		return fmt.Errorf("cloning %s: %w", repoURL, err)
 	}
 
-	for version, ref := range refs {
-		if err := indexRef(repo, version, ref, db, opts); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: skipping %s (%s): %v\n", version, ref[:minLen(ref, 12)], err)
-		}
-	}
-
+	indexRefs(repo, refs, db, opts)
 	return nil
 }
 
@@ -77,13 +77,18 @@ func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *
 		}
 	}
 
-	for version, ref := range refs {
-		if err := indexRef(repo, version, ref, db, opts); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: skipping %s (%s): %v\n", version, ref[:minLen(ref, 12)], err)
+	indexRefs(repo, refs, db, opts)
+	return nil
+}
+
+func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, opts IndexOptions) {
+	versions := slices.Collect(maps.Keys(refs))
+	slices.SortFunc(versions, cmpVersionDesc)
+	for _, version := range versions {
+		if err := indexRef(repo, version, refs[version], db, opts); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping %s (%s): %v\n", version, refs[version][:minLen(refs[version], 12)], err)
 		}
 	}
-
-	return nil
 }
 
 func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions) error {
@@ -97,16 +102,32 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 		return fmt.Errorf("getting tree: %w", err)
 	}
 
-	opts.logf("  indexing %s (%s)", version, ref[:minLen(ref, 12)])
+	var newHashes, totalHashes int
+	start := time.Now()
 
-	return tree.Files().ForEach(func(f *object.File) error {
-		return indexFile(f, db, opts)
+	err = tree.Files().ForEach(func(f *object.File) error {
+		n, t := indexFileCount(f, db, opts)
+		newHashes += n
+		totalHashes += t
+		return nil
 	})
+
+	elapsed := time.Since(start)
+	rate := float64(totalHashes) / max(elapsed.Seconds(), 0.001)
+
+	pkg := strings.TrimSuffix(strings.TrimPrefix(opts.PathPrefix, "vendor/"), "/")
+	opts.log(1, "  indexed %s@%s (%d new, %d total, %.0f hash/sec)", pkg, version, newHashes, totalHashes, rate)
+
+	if err == nil && opts.OnVersionDone != nil {
+		opts.OnVersionDone(version)
+	}
+
+	return err
 }
 
-func (opts IndexOptions) logf(format string, args ...any) {
-	if opts.Logf != nil {
-		opts.Logf(format, args...)
+func (opts IndexOptions) log(level int, format string, args ...any) {
+	if opts.Verbose >= level {
+		fmt.Println(fmt.Sprintf(format, args...))
 	}
 }
 
@@ -129,47 +150,53 @@ func (opts IndexOptions) InstallHTTPTransport() {
 	gitclient.InstallProtocol("http", t)
 }
 
-func indexFile(f *object.File, db *hashdb.HashDB, opts IndexOptions) error {
+// indexFileCount indexes a single file and returns (new hashes added, total hashes processed).
+func indexFileCount(f *object.File, db *hashdb.HashDB, opts IndexOptions) (int, int) {
 	if !opts.AllValidText && !normalize.HasValidExt(f.Name) {
-		opts.logf("    skip %s (no valid ext)", f.Name)
-		return nil
+		opts.log(3, "    skip %s (no valid ext)", f.Name)
+		return 0, 0
 	}
 
 	// Check UTF-8 validity by reading first 8KB
 	reader, err := f.Blob.Reader()
 	if err != nil {
-		return nil // skip unreadable files
+		return 0, 0 // skip unreadable files
 	}
 
 	buf := make([]byte, 8*1024)
 	n, err := reader.Read(buf)
 	reader.Close()
 	if err != nil && err != io.EOF {
-		return nil
+		return 0, 0
 	}
 	if !utf8.Valid(buf[:n]) {
-		opts.logf("    skip %s (invalid utf8)", f.Name)
-		return nil
+		opts.log(3, "    skip %s (invalid utf8)", f.Name)
+		return 0, 0
 	}
 
 	// Add path hash unless NoPlatform
 	if !opts.NoPlatform {
 		storedPath := opts.PathPrefix + f.Name
 		db.Add(normalize.PathHash(storedPath))
-		opts.logf("    hash %s", storedPath)
+		opts.log(3, "    hash %s", storedPath)
 	} else {
-		opts.logf("    hash %s", f.Name)
+		opts.log(3, "    hash %s", f.Name)
 	}
 
 	// Re-open reader and hash all lines
 	reader, err = f.Blob.Reader()
 	if err != nil {
-		return nil
+		return 0, 0
 	}
 	defer reader.Close()
 
-	normalize.HashReader(reader, db, opts.LineLogf)
-	return nil
+	var lineLogf func(string, ...any)
+	if opts.Verbose >= 4 {
+		lineLogf = func(format string, args ...any) {
+			fmt.Println(fmt.Sprintf(format, args...))
+		}
+	}
+	return normalize.HashReader(reader, db, lineLogf)
 }
 
 func minLen(s string, n int) int {
@@ -177,4 +204,57 @@ func minLen(s string, n int) int {
 		return len(s)
 	}
 	return n
+}
+
+// cmpVersionDesc compares two version strings in descending order.
+// Splits on "." and "-", compares segments numerically when possible.
+func cmpVersionDesc(a, b string) int {
+	return cmpVersion(b, a) // swap for descending
+}
+
+func cmpVersion(a, b string) int {
+	pa := splitVersion(a)
+	pb := splitVersion(b)
+	for i := range max(len(pa), len(pb)) {
+		var sa, sb string
+		if i < len(pa) {
+			sa = pa[i]
+		}
+		if i < len(pb) {
+			sb = pb[i]
+		}
+		na, errA := strconv.Atoi(sa)
+		nb, errB := strconv.Atoi(sb)
+		if errA == nil && errB == nil {
+			if na != nb {
+				if na < nb {
+					return -1
+				}
+				return 1
+			}
+			continue
+		}
+		if sa != sb {
+			if sa < sb {
+				return -1
+			}
+			return 1
+		}
+	}
+	return 0
+}
+
+func splitVersion(s string) []string {
+	s = strings.TrimPrefix(s, "v")
+	// Split on both "." and "-" to handle "1.2.3-beta1"
+	var parts []string
+	start := 0
+	for i := range len(s) {
+		if s[i] == '.' || s[i] == '-' {
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, s[start:])
+	return parts
 }

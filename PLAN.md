@@ -21,6 +21,7 @@ corediff/
 │   ├── highlight/         # ShouldHighlight (suspect pattern detection)
 │   ├── chunker/           # CDC: content-defined chunking for minified files
 │   ├── gitindex/          # Git clone + tree walk, zip fallback indexing
+│   ├── manifest/          # Append-only manifest tracking indexed package@version pairs
 │   ├── composer/          # Parse composer.json/lock, auth.json
 │   └── packagist/         # Packagist/Composer repository API client
 ├── fixture/
@@ -39,6 +40,7 @@ corediff/
 6. **Packagist indexing** — `db add --packagist vendor/package` with git clone or zip fallback.
 7. **Composer bulk indexing** — `db add --composer <path>` reads lock file, parallel goroutine pool.
 8. **Composer auth** — Reads `~/.composer/auth.json` (http-basic, bearer, github-oauth).
+9. **Manifest + incremental indexing** — Append-only `.manifest` file tracks `package@version` pairs. `--update` re-checks all packages for new versions.
 
 ---
 
@@ -46,6 +48,9 @@ corediff/
 
 **Goal:** Track which package@version pairs have been indexed, enabling `--update` mode
 to re-check all previously indexed packages for new versions without re-downloading everything.
+
+**Manifest location:** Derived from the database path by replacing the `.db` suffix with `.manifest`
+(or appending `.manifest` if no `.db` suffix). For example: `corediff.db` → `corediff.manifest`.
 
 **`internal/manifest/manifest.go`:**
 ```go
@@ -86,7 +91,7 @@ and indexes all transitive dependencies.
 
 **`corediff scan` enhancements:**
 - Default DB: `$XDG_DATA_HOME/corediff/default.db`. Override with `-d <path>`.
-- Error on first run if no DB exists, point user to `corediff db add`.
+- Error on first run if no DB exists.
 - Single file argument: auto-skip app root check.
 - Exit codes: 0=clean, 1=unrecognized lines, 2=suspect lines, >2=error.
 - Parallel file scanning (worker pool).

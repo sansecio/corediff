@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -259,4 +260,10 @@ func TestIntegration_PsrLog(t *testing.T) {
 
 	t.Logf("Indexed %d hashes from psr/log", db.Len())
 	assert.Greater(t, db.Len(), 10, "expected at least 10 hashes from psr/log")
+}
+
+func TestCmpVersionDesc(t *testing.T) {
+	versions := []string{"1.0.0", "3.255.8", "3.49.0", "3.356.10", "v2.1.0", "3.103.2-p3", "3.103.2"}
+	slices.SortFunc(versions, cmpVersionDesc)
+	assert.Equal(t, []string{"3.356.10", "3.255.8", "3.103.2-p3", "3.103.2", "3.49.0", "v2.1.0", "1.0.0"}, versions)
 }

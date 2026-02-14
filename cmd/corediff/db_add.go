@@ -13,6 +13,7 @@ import (
 	"github.com/gwillem/corediff/internal/composer"
 	"github.com/gwillem/corediff/internal/gitindex"
 	"github.com/gwillem/corediff/internal/hashdb"
+	"github.com/gwillem/corediff/internal/manifest"
 	"github.com/gwillem/corediff/internal/normalize"
 	"github.com/gwillem/corediff/internal/packagist"
 	cdpath "github.com/gwillem/corediff/internal/path"
@@ -21,6 +22,7 @@ import (
 type dbAddArg struct {
 	Packagist    string `short:"p" long:"packagist" description:"Index Packagist package (vendor/package)"`
 	Composer     string `long:"composer" description:"Index all packages from composer.json + lock"`
+	Update       bool   `short:"u" long:"update" description:"Re-check all previously indexed packages for new versions"`
 	IgnorePaths  bool   `short:"i" long:"ignore-paths" description:"Don't store file paths in DB."`
 	AllValidText bool   `short:"t" long:"text" description:"Scan all valid UTF-8 text files."`
 	NoPlatform   bool   `long:"no-platform" description:"Don't check for app root."`
@@ -30,7 +32,7 @@ type dbAddArg struct {
 }
 
 func (a *dbAddArg) Execute(_ []string) error {
-	// Mutual exclusion: only one of --packagist, --composer, or <path>
+	// Mutual exclusion: only one of --packagist, --composer, --update, or <path>
 	modes := 0
 	if a.Packagist != "" {
 		modes++
@@ -38,14 +40,17 @@ func (a *dbAddArg) Execute(_ []string) error {
 	if a.Composer != "" {
 		modes++
 	}
+	if a.Update {
+		modes++
+	}
 	if len(a.Path.Path) > 0 {
 		modes++
 	}
 	if modes > 1 {
-		return fmt.Errorf("cannot combine --packagist, --composer, and <path>; use only one")
+		return fmt.Errorf("cannot combine --packagist, --composer, --update, and <path>; use only one")
 	}
 	if modes == 0 {
-		return fmt.Errorf("please provide --packagist, --composer, or at least one <path> argument")
+		return fmt.Errorf("please provide --packagist, --composer, --update, or at least one <path> argument")
 	}
 
 	applyVerbose()
@@ -60,11 +65,20 @@ func (a *dbAddArg) Execute(_ []string) error {
 		return err
 	}
 
-	if a.Packagist != "" {
-		return a.executePackagist(db, dbPath)
-	}
-	if a.Composer != "" {
-		return a.executeComposer(db, dbPath)
+	if a.Packagist != "" || a.Composer != "" || a.Update {
+		mf, mfErr := manifest.Load(manifest.PathFromDB(dbPath))
+		if mfErr != nil {
+			return fmt.Errorf("loading manifest: %w", mfErr)
+		}
+		defer mf.Close()
+
+		if a.Update {
+			return a.executeUpdate(db, dbPath, mf)
+		}
+		if a.Packagist != "" {
+			return a.executePackagist(db, dbPath, mf)
+		}
+		return a.executeComposer(db, dbPath, mf)
 	}
 
 	return a.executeLocalPaths(db, dbPath)
@@ -86,17 +100,13 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func (a *dbAddArg) buildHTTPClient(opts *gitindex.IndexOptions) (*http.Client, error) {
 	var transport http.RoundTripper = http.DefaultTransport
 
+	opts.Verbose = len(globalOpts.Verbose)
+
 	if len(globalOpts.Verbose) >= 2 {
 		logf := func(format string, args ...any) {
 			fmt.Println(fmt.Sprintf(format, args...))
 		}
 		transport = &loggingTransport{base: transport, logf: logf}
-		if len(globalOpts.Verbose) >= 3 {
-			opts.Logf = logf
-		}
-		if len(globalOpts.Verbose) >= 4 {
-			opts.LineLogf = logf
-		}
 	}
 
 	authCfg, err := composer.FindAuthConfig()
@@ -178,7 +188,7 @@ func (a *dbAddArg) indexPackage(pkg, repoURL string, httpClient *http.Client, db
 	return nil
 }
 
-func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string) error {
+func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
 	// Parse optional version pin: "vendor/pkg:1.2.3" or "vendor/pkg@1.2.3"
 	pkg := a.Packagist
 	var pinVersion string
@@ -217,10 +227,33 @@ func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string) error {
 		versions = filtered
 	}
 
-	logVerbose(fmt.Sprintf("Found %d versions for %s", len(versions), pkg))
+	// Filter out already-indexed versions
+	total := len(versions)
+	var newVersions []packagist.Version
+	for _, v := range versions {
+		if !mf.IsIndexed(pkg, v.Version) {
+			newVersions = append(newVersions, v)
+		}
+	}
+	versions = newVersions
+
+	if skipped := total - len(versions); skipped > 0 {
+		fmt.Printf("Skipping %d already-indexed versions for %s\n", skipped, pkg)
+	}
+	if len(versions) == 0 {
+		fmt.Printf("All %d versions of %s already indexed\n", total, pkg)
+		return nil
+	}
+
+	logVerbose(fmt.Sprintf("Indexing %d new versions for %s", len(versions), pkg))
 
 	oldSize := db.Len()
 	opts.PathPrefix = "vendor/" + pkg + "/"
+	opts.OnVersionDone = func(version string) {
+		if err := mf.MarkIndexed(pkg, version); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+		}
+	}
 
 	// Try git source if available, fall back to zip
 	useZip := true
@@ -260,6 +293,8 @@ func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string) error {
 			logVerbose(fmt.Sprintf("  downloading %s (%s)", v.Version, v.Dist.URL))
 			if err := gitindex.IndexZip(v.Dist.URL, db, opts); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", v.Version, err)
+			} else {
+				opts.OnVersionDone(v.Version)
 			}
 		}
 	}
@@ -273,7 +308,7 @@ func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string) error {
 	return nil
 }
 
-func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string) error {
+func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
 	proj, err := composer.ParseProject(a.Composer)
 	if err != nil {
 		return err
@@ -289,7 +324,27 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string) error {
 		return err
 	}
 
-	fmt.Printf("Found %d packages across %d repositories\n", len(proj.Packages), len(proj.Repos))
+	// Filter out already-indexed packages
+	var newPkgs []composer.LockPackage
+	var skipped int
+	for _, pkg := range proj.Packages {
+		if mf.IsIndexed(pkg.Name, pkg.Version) {
+			skipped++
+		} else {
+			newPkgs = append(newPkgs, pkg)
+		}
+	}
+
+	fmt.Printf("Found %d packages across %d repositories", len(proj.Packages), len(proj.Repos))
+	if skipped > 0 {
+		fmt.Printf(" (%d already indexed)", skipped)
+	}
+	fmt.Println()
+
+	if len(newPkgs) == 0 {
+		fmt.Println("All packages already indexed")
+		return nil
+	}
 
 	// Install go-git HTTP transport once before concurrent operations
 	opts.InstallHTTPTransport()
@@ -302,7 +357,7 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string) error {
 		sem = make(chan struct{}, runtime.GOMAXPROCS(0))
 	)
 
-	for _, pkg := range proj.Packages {
+	for _, pkg := range newPkgs {
 		sem <- struct{}{} // acquire slot
 		wg.Add(1)
 		go func() {
@@ -311,6 +366,137 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string) error {
 
 			pkgDB := hashdb.New()
 			a.indexComposerPackage(pkg, proj.Repos, httpClient, pkgDB, opts)
+
+			mu.Lock()
+			db.Merge(pkgDB)
+			mu.Unlock()
+
+			if err := mf.MarkIndexed(pkg.Name, pkg.Version); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	newHashes := db.Len() - oldSize
+	if newHashes > 0 {
+		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
+		return db.Save(dbPath)
+	}
+	fmt.Println("Found no new code hashes...")
+	return nil
+}
+
+func (a *dbAddArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
+	pkgs := mf.Packages()
+	if len(pkgs) == 0 {
+		return fmt.Errorf("manifest is empty — nothing to update. Index packages first with --packagist or --composer")
+	}
+
+	fmt.Printf("Checking %d packages for new versions...\n", len(pkgs))
+
+	opts := gitindex.IndexOptions{
+		NoPlatform:   a.NoPlatform,
+		AllValidText: a.AllValidText,
+	}
+
+	httpClient, err := a.buildHTTPClient(&opts)
+	if err != nil {
+		return err
+	}
+
+	// Install go-git HTTP transport once before concurrent operations
+	opts.InstallHTTPTransport()
+
+	oldSize := db.Len()
+
+	var (
+		mu  sync.Mutex
+		wg  sync.WaitGroup
+		sem = make(chan struct{}, runtime.GOMAXPROCS(0))
+	)
+
+	for _, pkg := range pkgs {
+		sem <- struct{}{} // acquire slot
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }() // release slot
+
+			c := &packagist.Client{HTTP: httpClient}
+			versions, err := c.Versions(pkg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: fetching versions for %s: %v\n", pkg, err)
+				return
+			}
+
+			// Filter to only new versions
+			var newVersions []packagist.Version
+			for _, v := range versions {
+				if !mf.IsIndexed(pkg, v.Version) {
+					newVersions = append(newVersions, v)
+				}
+			}
+
+			if len(newVersions) == 0 {
+				logVerbose(fmt.Sprintf("  %s: up to date", pkg))
+				return
+			}
+
+			fmt.Printf("  %s: %d new versions\n", pkg, len(newVersions))
+
+			pkgOpts := opts
+			pkgOpts.PathPrefix = "vendor/" + pkg + "/"
+			pkgOpts.OnVersionDone = func(version string) {
+				if err := mf.MarkIndexed(pkg, version); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+				}
+			}
+
+			pkgDB := hashdb.New()
+
+			// Try git source if available, fall back to zip
+			useZip := true
+			if newVersions[0].Source.Type == "git" {
+				repoURL := newVersions[0].Source.URL
+				refs := make(map[string]string, len(newVersions))
+				for _, v := range newVersions {
+					if v.Source.Reference != "" {
+						refs[v.Version] = v.Source.Reference
+					}
+				}
+
+				var gitErr error
+				if dbCommand.CacheDir != "" {
+					cloneDir := filepath.Join(dbCommand.CacheDir, "git", sanitizePath(pkg))
+					if err := os.MkdirAll(cloneDir, 0o755); err != nil {
+						fmt.Fprintf(os.Stderr, "warning: creating cache dir for %s: %v\n", pkg, err)
+					} else {
+						gitErr = gitindex.CloneAndIndexWithDir(repoURL, cloneDir, refs, pkgDB, pkgOpts)
+					}
+				} else {
+					gitErr = gitindex.CloneAndIndex(repoURL, refs, pkgDB, pkgOpts)
+				}
+				if gitErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: git clone failed for %s: %v, trying zip\n", pkg, gitErr)
+				} else {
+					useZip = false
+				}
+			}
+
+			if useZip {
+				for _, v := range newVersions {
+					if v.Dist.URL == "" {
+						continue
+					}
+					if err := gitindex.IndexZip(v.Dist.URL, pkgDB, pkgOpts); err != nil {
+						fmt.Fprintf(os.Stderr, "warning: skipping %s %s: %v\n", pkg, v.Version, err)
+					} else {
+						pkgOpts.OnVersionDone(v.Version)
+					}
+				}
+			}
 
 			mu.Lock()
 			db.Merge(pkgDB)
@@ -325,7 +511,7 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string) error {
 		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
 		return db.Save(dbPath)
 	}
-	fmt.Println("Found no new code hashes...")
+	fmt.Println("All packages up to date, no new hashes")
 	return nil
 }
 

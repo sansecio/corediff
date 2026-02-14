@@ -44,7 +44,7 @@ Single binary with two top-level subcommands. `scan` is the default
 - [x] `corediff db merge <db1> <db2>` — Merge multiple databases
 - [x] `corediff db info [db-path]` — Print DB stats (hash count, format version, file size)
 - [ ] Default DB: `$XDG_DATA_HOME/corediff/default.db`. Override with `-d <path>`.
-- [ ] Manifest: `$XDG_DATA_HOME/corediff/manifest.txt`
+- [x] Manifest: sibling of DB file (e.g. `corediff.db` → `corediff.manifest`)
 
 ## Database
 
@@ -65,8 +65,8 @@ Pipeline: `corediff db add --packagist <package>`, `corediff db add --composer <
 - [x] Read `~/.composer/auth.json` for private repo auth (http-basic, bearer, github-oauth)
 - [x] Sort + deduplicate DB before save
 - [ ] Follow dependencies recursively by default. `--no-deps` to index a single package only.
-- [ ] `--update` mode: re-check all previously indexed packages for new versions
-- [ ] Append-only text manifest for state (`package@version` per line, one entry per indexed version)
+- [x] `--update` mode: re-check all previously indexed packages for new versions
+- [x] Append-only text manifest for state (`package@version` per line, one entry per indexed version)
 
 
 ## Scanning

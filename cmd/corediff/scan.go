@@ -168,7 +168,8 @@ func addFileHashes(path string, db *hashdb.HashDB) int {
 		return 0
 	}
 	defer fh.Close()
-	return normalize.HashReader(fh, db, nil)
+	n, _ := normalize.HashReader(fh, db, nil)
+	return n
 }
 
 // scanFileWithDB scans path and returns line numbers and content of lines

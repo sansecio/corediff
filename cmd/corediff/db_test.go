@@ -130,7 +130,7 @@ func TestDBAdd_PackagistValidation(t *testing.T) {
 		arg := dbAddArg{}
 		err := arg.Execute(nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "provide --packagist, --composer, or at least one <path>")
+		assert.Contains(t, err.Error(), "provide --packagist, --composer, --update, or at least one <path>")
 	})
 
 	t.Run("composer missing file", func(t *testing.T) {

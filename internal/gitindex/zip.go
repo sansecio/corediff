@@ -49,7 +49,7 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 		}
 
 		if !opts.AllValidText && !normalize.HasValidExt(name) {
-			opts.logf("    skip %s (no valid ext)", name)
+			opts.log(3,"    skip %s (no valid ext)", name)
 			continue
 		}
 
@@ -66,7 +66,7 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 			continue
 		}
 		if !utf8.Valid(buf[:n]) {
-			opts.logf("    skip %s (invalid utf8)", name)
+			opts.log(3,"    skip %s (invalid utf8)", name)
 			rc.Close()
 			continue
 		}
@@ -81,12 +81,18 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 		if !opts.NoPlatform {
 			storedPath := opts.PathPrefix + name
 			db.Add(normalize.PathHash(storedPath))
-			opts.logf("    hash %s", storedPath)
+			opts.log(3,"    hash %s", storedPath)
 		} else {
-			opts.logf("    hash %s", name)
+			opts.log(3,"    hash %s", name)
 		}
 
-		normalize.HashReader(rc, db, opts.LineLogf)
+		var lineLogf func(string, ...any)
+		if opts.Verbose >= 4 {
+			lineLogf = func(format string, args ...any) {
+				fmt.Println(fmt.Sprintf(format, args...))
+			}
+		}
+		normalize.HashReader(rc, db, lineLogf)
 		rc.Close()
 	}
 

@@ -86,18 +86,19 @@ func HasValidExt(path string) bool {
 const maxTokenSize = 1024 * 1024 * 10 // 10 MB
 
 // HashReader scans lines from r, normalizes and hashes each line,
-// and adds new hashes to db. Returns the count of new hashes added.
+// and adds new hashes to db. Returns (new hashes added, total hashes processed).
 // If logf is non-nil, each hash is logged as "HASH line".
-func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any)) int {
+func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any)) (int, int) {
 	scanner := bufio.NewScanner(r)
 	buf := make([]byte, maxTokenSize)
 	scanner.Buffer(buf, maxTokenSize)
 
-	added := 0
+	var added, total int
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		hashes := HashLine(line)
 		for _, h := range hashes {
+			total++
 			if !db.Contains(h) {
 				db.Add(h)
 				added++
@@ -107,7 +108,7 @@ func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any)) int {
 			}
 		}
 	}
-	return added
+	return added, total
 }
 
 // IsValidUtf8 checks if the first 8KB of a file is valid UTF-8.
