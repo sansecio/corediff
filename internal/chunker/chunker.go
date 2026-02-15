@@ -1,5 +1,5 @@
 // Package chunker provides content-defined chunking (CDC) for minified files.
-// Lines longer than chunkThreshold are split into variable-size chunks using a
+// Lines longer than ChunkThreshold are split into variable-size chunks using a
 // Buzhash rolling hash, so that small edits only affect nearby chunks.
 package chunker
 
@@ -8,7 +8,7 @@ const (
 	mask           = 0x7F // average chunk ~128 bytes
 	minChunk       = 64
 	maxChunk       = 512
-	chunkThreshold = 512 // lines <= this length are not chunked
+	ChunkThreshold = 512 // lines <= this length are not chunked
 )
 
 // buzhash byte-to-hash table
@@ -38,9 +38,9 @@ func rotateLeft(h uint64, n int) uint64 {
 }
 
 // ChunkLine splits a line into content-defined chunks if it exceeds
-// chunkThreshold. Short lines are returned as-is in a single-element slice.
+// ChunkThreshold. Short lines are returned as-is in a single-element slice.
 func ChunkLine(line []byte) [][]byte {
-	if len(line) <= chunkThreshold {
+	if len(line) <= ChunkThreshold {
 		return [][]byte{line}
 	}
 	return chunk(line)

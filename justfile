@@ -1,3 +1,6 @@
+test:
+    go test ./...
+
 mogo:
     #!/usr/bin/env bash
     tmp=$(mktemp)

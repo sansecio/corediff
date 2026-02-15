@@ -8,18 +8,25 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/gwillem/corediff/internal/chunker"
 	"github.com/gwillem/corediff/internal/hashdb"
+	"github.com/zeebo/xxh3"
 )
+
+const minSize = 10 // skip shorter lines
 
 var (
 	normalizeRx = []*regexp.Regexp{
 		regexp.MustCompile(`'reference' => '[a-f0-9]{40}',`),
 	}
+
+	// rxGuard is a cheap prefix check: only run the regex if the line
+	// contains this literal substring. Avoids regex overhead on 99%+ of lines.
+	rxGuard = []byte("'reference' =>")
 
 	skipLines = [][]byte{
 		[]byte("*"),
@@ -36,51 +43,54 @@ var (
 // stripping comments, and applying regex filters.
 func Line(b []byte) []byte {
 	b = bytes.TrimSpace(b)
-	for _, prefix := range skipLines {
-		if bytes.HasPrefix(b, prefix) {
+	if len(b) < minSize {
+		return b
+	}
+	for i := range skipLines {
+		if bytes.HasPrefix(b, skipLines[i]) {
 			return []byte{}
 		}
 	}
-	for _, rx := range normalizeRx {
-		b = rx.ReplaceAllLiteral(b, nil)
+	if bytes.Contains(b, rxGuard) {
+		for _, rx := range normalizeRx {
+			b = rx.ReplaceAllLiteral(b, nil)
+		}
 	}
 	return b
 }
 
-// Hash returns the xxhash64 of b.
-func Hash(b []byte) uint64 {
-	return xxhash.Sum64(b)
-}
-
-// HashLine normalizes a line, then chunks it if it's long (minified code).
-// Returns one or more hashes. Empty/comment lines return nil.
-func HashLine(raw []byte) []uint64 {
+// HashLine normalizes a line, then hashes it (chunking if minified).
+// Calls fn for each hash produced. fn returns true to continue, false to stop.
+// Empty/comment lines produce no calls to fn.
+func HashLine(raw []byte, fn func(uint64) bool) {
+	if len(raw) < minSize {
+		return
+	}
 	norm := Line(raw)
-	if len(norm) == 0 {
-		return nil
+	if len(norm) < minSize {
+		return
 	}
-	chunks := chunker.ChunkLine(norm)
-	hashes := make([]uint64, len(chunks))
-	for i, c := range chunks {
-		hashes[i] = Hash(c)
+	// Fast path: lines within chunk threshold (vast majority) produce a
+	// single hash without going through ChunkLine.
+	if len(norm) <= chunker.ChunkThreshold {
+		fn(xxh3.Hash(norm))
+		return
 	}
-	return hashes
+	for _, c := range chunker.ChunkLine(norm) {
+		if !fn(xxh3.Hash(c)) {
+			return
+		}
+	}
 }
 
 // PathHash returns the hash for a path entry (prefixed with "path:").
 func PathHash(p string) uint64 {
-	return Hash([]byte("path:" + p))
+	return xxh3.Hash([]byte("path:" + p))
 }
 
 // HasValidExt reports whether path has a recognized code file extension.
 func HasValidExt(path string) bool {
-	got := strings.TrimLeft(filepath.Ext(path), ".")
-	for _, want := range ScanExts {
-		if got == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ScanExts, strings.TrimLeft(filepath.Ext(path), "."))
 }
 
 const maxTokenSize = 1024 * 1024 * 10 // 10 MB
@@ -96,8 +106,7 @@ func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any)) (int,
 	var added, total int
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		hashes := HashLine(line)
-		for _, h := range hashes {
+		HashLine(line, func(h uint64) bool {
 			total++
 			if !db.Contains(h) {
 				db.Add(h)
@@ -106,7 +115,8 @@ func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any)) (int,
 			if logf != nil {
 				logf("      %016x %s", h, line)
 			}
-		}
+			return true
+		})
 	}
 	return added, total
 }

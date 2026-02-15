@@ -84,9 +84,10 @@ func TestCloneAndIndex(t *testing.T) {
 	assert.True(t, db.Contains(normalize.PathHash("lib/helper.php")))
 
 	// Line hashes for PHP content should be present
-	for _, h := range normalize.HashLine([]byte("echo 'hello';")) {
+	normalize.HashLine([]byte("echo 'hello';"), func(h uint64) bool {
 		assert.True(t, db.Contains(h), "missing hash for 'echo hello'")
-	}
+		return true
+	})
 }
 
 func TestCloneAndIndex_PathPrefix(t *testing.T) {
@@ -188,9 +189,10 @@ func TestIndexZip(t *testing.T) {
 	assert.True(t, db.Contains(normalize.PathHash("lib/helper.php")))
 
 	// Line hashes should be present
-	for _, h := range normalize.HashLine([]byte("echo 'hello';")) {
+	normalize.HashLine([]byte("echo 'hello';"), func(h uint64) bool {
 		assert.True(t, db.Contains(h))
-	}
+		return true
+	})
 
 	// readme.txt should be skipped (no valid ext, AllValidText=false)
 	assert.False(t, db.Contains(normalize.PathHash("readme.txt")))
@@ -351,15 +353,15 @@ func TestCloneAndIndex_BlobDedup(t *testing.T) {
 	assert.Greater(t, db.Len(), 0)
 
 	// All line hashes from both versions should be present
-	for _, h := range normalize.HashLine([]byte("echo 'hello';")) {
-		assert.True(t, db.Contains(h))
+	assertHashed := func(line string) {
+		normalize.HashLine([]byte(line), func(h uint64) bool {
+			assert.True(t, db.Contains(h))
+			return true
+		})
 	}
-	for _, h := range normalize.HashLine([]byte("echo 'hello world';")) {
-		assert.True(t, db.Contains(h))
-	}
-	for _, h := range normalize.HashLine([]byte("function foo() { return 1; }")) {
-		assert.True(t, db.Contains(h))
-	}
+	assertHashed("echo 'hello';")
+	assertHashed("echo 'hello world';")
+	assertHashed("function foo() { return 1; }")
 
 	// Verify by comparing against indexing each version separately (no dedup)
 	dbSeparate := hashdb.New()

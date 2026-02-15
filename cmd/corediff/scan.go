@@ -178,17 +178,14 @@ func scanFileWithDB(path string, db *hashdb.HashDB) (hits []int, lines [][]byte)
 	c := 0
 	err := parseFile(path, func(line []byte) {
 		c++
-		hashes := normalize.HashLine(line)
-		if len(hashes) == 0 {
-			return // empty/comment line
-		}
-		for _, h := range hashes {
+		normalize.HashLine(line, func(h uint64) bool {
 			if !db.Contains(h) {
 				hits = append(hits, c)
 				lines = append(lines, line)
-				return
+				return false
 			}
-		}
+			return true
+		})
 	})
 	if err != nil {
 		log.Println("err: ", err)

@@ -17,13 +17,13 @@ func TestChunkLineBelowThreshold(t *testing.T) {
 }
 
 func TestChunkLineExactlyAtThreshold(t *testing.T) {
-	line := bytes.Repeat([]byte("a"), chunkThreshold)
+	line := bytes.Repeat([]byte("a"), ChunkThreshold)
 	chunks := ChunkLine(line)
 	assert.Equal(t, 1, len(chunks), "line exactly at threshold should not be chunked")
 }
 
 func TestChunkLineAboveThreshold(t *testing.T) {
-	line := bytes.Repeat([]byte("x"), chunkThreshold+1)
+	line := bytes.Repeat([]byte("x"), ChunkThreshold+1)
 	chunks := ChunkLine(line)
 	assert.Greater(t, len(chunks), 1, "line above threshold should be chunked")
 }
@@ -97,7 +97,7 @@ func TestChunkLineRealFile(t *testing.T) {
 		t.Skip("fixture not available")
 	}
 	// This file is a single long minified line
-	require.Greater(t, len(data), chunkThreshold)
+	require.Greater(t, len(data), ChunkThreshold)
 
 	chunks := ChunkLine(data)
 	assert.Greater(t, len(chunks), 10, "should produce many chunks for 6KB minified file")

@@ -3,7 +3,6 @@ module github.com/gwillem/corediff
 go 1.26
 
 require (
-	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/fatih/color v1.16.0
 	github.com/go-git/go-git/v5 v5.16.5
 	github.com/gobwas/glob v0.2.3
@@ -12,6 +11,7 @@ require (
 	github.com/gwillem/urlfilecache v0.0.0-20230402105623-8ef3b7b67c13
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/stretchr/testify v1.10.0
+	github.com/zeebo/xxh3 v1.1.0
 )
 
 require (
@@ -28,6 +28,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pjbgf/sha1cd v0.3.2 // indirect

@@ -10,8 +10,8 @@ import (
 func Test_addFileHashes(t *testing.T) {
 	hdb := hashdb.New()
 	n := addFileHashes("../../fixture/docroot/odd-encoding.js", hdb)
-	assert.Equal(t, 219, hdb.Len())
-	assert.Equal(t, 219, n)
+	assert.Equal(t, 203, hdb.Len())
+	assert.Equal(t, 203, n)
 }
 
 func Test_scanFileWithDB(t *testing.T) {

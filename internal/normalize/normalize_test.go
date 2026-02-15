@@ -7,6 +7,7 @@ import (
 
 	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/stretchr/testify/assert"
+	"github.com/zeebo/xxh3"
 )
 
 func TestLine(t *testing.T) {
@@ -53,28 +54,32 @@ func TestHashReader(t *testing.T) {
 		assert.Greater(t, n, 0)
 		assert.Greater(t, total, n) // total includes duplicates
 		// All hashes from first line should already exist for second
-		assert.Equal(t, len(HashLine([]byte("echo 'hello';"))), db.Len())
+		count := 0
+		HashLine([]byte("echo 'hello';"), func(uint64) bool { count++; return true })
+		assert.Equal(t, count, db.Len())
 	})
 
 	t.Run("returns count of new hashes", func(t *testing.T) {
 		db := hashdb.New()
-		input := "line1;\nline2;\n"
+		input := "line1line1;\nline2line2;\n"
 		n, _ := HashReader(strings.NewReader(input), db, nil)
-		expected := len(HashLine([]byte("line1;"))) + len(HashLine([]byte("line2;")))
+		expected := 0
+		HashLine([]byte("line1line1;"), func(uint64) bool { expected++; return true })
+		HashLine([]byte("line2line2;"), func(uint64) bool { expected++; return true })
 		assert.Equal(t, expected, n)
 	})
 }
 
-func TestHash(t *testing.T) {
+func TestHashSanity(t *testing.T) {
 	tests := []struct {
 		args []byte
 		want string
 	}{
-		{[]byte("banaan"), "acfb1ff4438e39f3"},
+		{[]byte("banaan"), "bb9aa85f787ea9ad"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.args), func(t *testing.T) {
-			got := fmt.Sprintf("%016x", Hash(tt.args))
+			got := fmt.Sprintf("%016x", xxh3.Hash(tt.args))
 			assert.Equal(t, tt.want, got)
 		})
 	}
