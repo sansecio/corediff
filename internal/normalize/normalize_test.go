@@ -54,7 +54,7 @@ func TestHashReader(t *testing.T) {
 		assert.Greater(t, total, n) // total includes duplicates
 		// All hashes from first line should already exist for second
 		count := 0
-		HashLine([]byte("echo 'hello';"), func(uint64) bool { count++; return true })
+		HashLine([]byte("echo 'hello';"), func(uint64, []byte) bool { count++; return true })
 		assert.Equal(t, count, db.Len())
 	})
 
@@ -63,8 +63,8 @@ func TestHashReader(t *testing.T) {
 		input := "line1line1;\nline2line2;\n"
 		n, _ := HashReader(strings.NewReader(input), db, nil, nil)
 		expected := 0
-		HashLine([]byte("line1line1;"), func(uint64) bool { expected++; return true })
-		HashLine([]byte("line2line2;"), func(uint64) bool { expected++; return true })
+		HashLine([]byte("line1line1;"), func(uint64, []byte) bool { expected++; return true })
+		HashLine([]byte("line2line2;"), func(uint64, []byte) bool { expected++; return true })
 		assert.Equal(t, expected, n)
 	})
 }

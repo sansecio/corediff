@@ -1,3 +1,18 @@
+# Benchmarks
+
+## End-to-end scan: v3 vs main
+
+Scanning 62150 files (Magento 2 docroot) against `m2-legacy.db` (5.3M hashes, xxhash64 legacy format). Fastest of 10 runs, Apple M2.
+
+| Version | Wall time | Relative |
+| ------- | --------- | -------- |
+| **v3** ([`32b4428`](https://github.com/gwillem/corediff/commit/32b4428)) | **2.47s** | **1.40x faster** |
+| main ([`68699bf`](https://github.com/gwillem/corediff/commit/68699bf)) | 3.45s | baseline |
+
+Key changes in v3: optimized normalize pipeline ([`1f5b9c5`](https://github.com/gwillem/corediff/commit/1f5b9c5)), reusable scanner buffer ([`0116cfa`](https://github.com/gwillem/corediff/commit/0116cfa)), legacy hash auto-detection ([`32b4428`](https://github.com/gwillem/corediff/commit/32b4428)).
+
+---
+
 # Hash Benchmarks
 
 Benchmarked on Apple M2, Go 1.22+, using `fixture/typicalfile.php` (949 lines of Magento PHP).

@@ -91,6 +91,88 @@ func TestChunkLineEmpty(t *testing.T) {
 	assert.Equal(t, []byte(nil), chunks[0])
 }
 
+func TestChunkLinePreferCommas(t *testing.T) {
+	data, err := os.ReadFile("testdata/original.php")
+	require.NoError(t, err)
+
+	// Find the long line (line 14, the PHP array)
+	var longLine []byte
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		trimmed := bytes.TrimSpace(line)
+		if len(trimmed) > ChunkThreshold {
+			longLine = trimmed
+			break
+		}
+	}
+	require.NotNil(t, longLine, "no long line found in fixture")
+
+	chunks := ChunkLine(longLine)
+	t.Logf("%d chunks from %d byte line:", len(chunks), len(longLine))
+	for i, c := range chunks {
+		t.Logf("  chunk %2d: %3d bytes  %.60q", i, len(c), c)
+	}
+
+	// Most chunks should end with a comma (preferred boundary)
+	commaEndings := 0
+	for _, c := range chunks[:len(chunks)-1] { // skip last chunk (remainder)
+		if c[len(c)-1] == ',' {
+			commaEndings++
+		}
+	}
+	assert.Greater(t, commaEndings, len(chunks)/2,
+		"most chunks should end at comma boundaries")
+}
+
+func TestChunkLineModifiedDetection(t *testing.T) {
+	original, err := os.ReadFile("testdata/original.php")
+	require.NoError(t, err)
+	modified, err := os.ReadFile("testdata/modified.php")
+	require.NoError(t, err)
+
+	// Find the long lines
+	findLong := func(data []byte) []byte {
+		for _, line := range bytes.Split(data, []byte("\n")) {
+			trimmed := bytes.TrimSpace(line)
+			if len(trimmed) > ChunkThreshold {
+				return trimmed
+			}
+		}
+		return nil
+	}
+	origLine := findLong(original)
+	modLine := findLong(modified)
+	require.NotNil(t, origLine)
+	require.NotNil(t, modLine)
+
+	origChunks := ChunkLine(origLine)
+	modChunks := ChunkLine(modLine)
+
+	origSet := make(map[string]bool)
+	for _, c := range origChunks {
+		origSet[string(c)] = true
+	}
+	var mismatched []string
+	for _, c := range modChunks {
+		if !origSet[string(c)] {
+			mismatched = append(mismatched, string(c))
+		}
+	}
+
+	// Should detect exactly the chunks containing PROD-666 and 29.99
+	assert.LessOrEqual(t, len(mismatched), 3, "should have few mismatched chunks")
+	found := map[string]bool{"PROD-666": false, "29.99": false}
+	for _, m := range mismatched {
+		for key := range found {
+			if bytes.Contains([]byte(m), []byte(key)) {
+				found[key] = true
+			}
+		}
+	}
+	for key, ok := range found {
+		assert.True(t, ok, "mismatched chunks should contain %q", key)
+	}
+}
+
 func TestChunkLineRealFile(t *testing.T) {
 	data, err := os.ReadFile("../../fixture/docroot/editor_plugin.js")
 	if err != nil {

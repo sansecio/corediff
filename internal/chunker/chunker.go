@@ -5,9 +5,9 @@ package chunker
 
 const (
 	windowSize     = 32
-	mask           = 0x7F // average chunk ~128 bytes
-	minChunk       = 64
-	maxChunk       = 512
+	mask           = 0x3F // average chunk ~64 bytes
+	minChunk       = 32
+	maxChunk       = 128
 	ChunkThreshold = 512 // lines <= this length are not chunked
 )
 
@@ -68,7 +68,7 @@ func chunk(data []byte) [][]byte {
 		if chunkLen < minChunk {
 			continue
 		}
-		if chunkLen >= maxChunk || (hash&mask == 0) {
+		if chunkLen >= maxChunk || (hash&mask == 0) || data[i] == ',' {
 			chunks = append(chunks, data[start:i+1])
 			start = i + 1
 			hash = 0

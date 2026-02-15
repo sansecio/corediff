@@ -35,7 +35,7 @@ func BenchmarkHashLine(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		for _, line := range lines {
-			HashLine(line, func(uint64) bool { return true })
+			HashLine(line, func(uint64, []byte) bool { return true })
 		}
 	}
 	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(lines)), "ns/line")
@@ -128,7 +128,7 @@ func BenchmarkHashLineAlloc(b *testing.B) {
 	b.ReportAllocs()
 	for range b.N {
 		for _, line := range lines {
-			HashLine(line, func(uint64) bool { return true })
+			HashLine(line, func(uint64, []byte) bool { return true })
 		}
 	}
 }

@@ -178,11 +178,11 @@ func scanFileWithDB(path string, db *hashdb.HashDB, scanBuf []byte) (hits []int,
 	c := 0
 	err := parseFile(path, func(line []byte) {
 		c++
-		normalize.HashLine(line, func(h uint64) bool {
+		normalize.HashLine(line, func(h uint64, chunk []byte) bool {
 			if !db.Contains(h) {
 				hits = append(hits, c)
-				lines = append(lines, line)
-				return false
+				lines = append(lines, chunk)
+				return true // continue to find all mismatched chunks
 			}
 			return true
 		})

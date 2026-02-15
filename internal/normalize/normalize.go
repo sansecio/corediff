@@ -74,9 +74,11 @@ func UseXXHash64() { Hash = xxhash.Sum64 }
 func UseXXH3() { Hash = xxh3.Hash }
 
 // HashLine normalizes a line, then hashes it (chunking if minified).
-// Calls fn for each hash produced. fn returns true to continue, false to stop.
+// Calls fn for each hash produced with the chunk that produced it.
+// For non-chunked lines, chunk == the full normalized line.
+// fn returns true to continue, false to stop.
 // Empty/comment lines produce no calls to fn.
-func HashLine(raw []byte, fn func(uint64) bool) {
+func HashLine(raw []byte, fn func(hash uint64, chunk []byte) bool) {
 	if len(raw) < minSize {
 		return
 	}
@@ -87,11 +89,11 @@ func HashLine(raw []byte, fn func(uint64) bool) {
 	// Fast path: lines within chunk threshold (vast majority) produce a
 	// single hash without going through ChunkLine.
 	if len(norm) <= chunker.ChunkThreshold {
-		fn(Hash(norm))
+		fn(Hash(norm), norm)
 		return
 	}
 	for _, c := range chunker.ChunkLine(norm) {
-		if !fn(Hash(c)) {
+		if !fn(Hash(c), c) {
 			return
 		}
 	}
@@ -129,7 +131,7 @@ func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any), buf [
 	var added, total int
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		HashLine(line, func(h uint64) bool {
+		HashLine(line, func(h uint64, _ []byte) bool {
 			total++
 			if !db.Contains(h) {
 				db.Add(h)
