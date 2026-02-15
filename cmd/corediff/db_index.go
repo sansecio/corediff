@@ -100,15 +100,12 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // buildHTTPClient constructs an HTTP client with the auth + logging transport chain.
-// It also populates opts.Logf / opts.LineLogf based on verbosity.
 func (a *dbIndexArg) buildHTTPClient(opts *gitindex.IndexOptions) (*http.Client, error) {
 	var transport http.RoundTripper = http.DefaultTransport
 
-	opts.Verbose = len(globalOpts.Verbose)
-
 	if len(globalOpts.Verbose) >= 2 {
 		logf := func(format string, args ...any) {
-			fmt.Println(fmt.Sprintf(format, args...))
+			fmt.Printf(format+"\n", args...)
 		}
 		transport = &loggingTransport{base: transport, logf: logf}
 	}
@@ -143,7 +140,6 @@ func (a *dbIndexArg) indexVersions(pkg string, versions []packagist.Version, db 
 	}
 
 	// Try git source if available, fall back to zip
-	useZip := true
 	if versions[0].Source.Type == "git" {
 		repoURL := versions[0].Source.URL
 		refs := make(map[string]string, len(versions))
@@ -172,17 +168,15 @@ func (a *dbIndexArg) indexVersions(pkg string, versions []packagist.Version, db 
 		}
 	}
 
-	if useZip {
-		for _, v := range versions {
-			if v.Dist.URL == "" {
-				continue
-			}
-			logVerbose(fmt.Sprintf("  downloading %s (%s)", v.Version, v.Dist.URL))
-			if err := gitindex.IndexZip(v.Dist.URL, db, opts); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: skipping %s %s: %v\n", pkg, v.Version, err)
-			} else if opts.OnVersionDone != nil {
-				opts.OnVersionDone(v.Version)
-			}
+	for _, v := range versions {
+		if v.Dist.URL == "" {
+			continue
+		}
+		logVerbose(fmt.Sprintf("  downloading %s (%s)", v.Version, v.Dist.URL))
+		if err := gitindex.IndexZip(v.Dist.URL, db, opts); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping %s %s: %v\n", pkg, v.Version, err)
+		} else if opts.OnVersionDone != nil {
+			opts.OnVersionDone(v.Version)
 		}
 	}
 	return nil
@@ -223,6 +217,7 @@ func (a *dbIndexArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *mani
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
 		CacheDir:     dbCommand.CacheDir,
+		Verbose:      len(globalOpts.Verbose),
 	}
 
 	httpClient, err := a.buildHTTPClient(&opts)
@@ -338,6 +333,7 @@ func (a *dbIndexArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manif
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
 		CacheDir:     dbCommand.CacheDir,
+		Verbose:      len(globalOpts.Verbose),
 	}
 
 	httpClient, err := a.buildHTTPClient(&opts)
@@ -375,7 +371,7 @@ func (a *dbIndexArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manif
 	fmt.Printf("Found %d packages across %d repositories", len(proj.Packages), len(proj.Repos))
 	if skipped > 0 || replaced > 0 {
 		fmt.Printf(" (")
-		parts := []string{}
+		var parts []string
 		if skipped > 0 {
 			parts = append(parts, fmt.Sprintf("%d already indexed", skipped))
 		}
@@ -438,7 +434,7 @@ func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifes
 
 	fmt.Printf("Checking %d packages for new versions", len(packagistPkgs)+len(gitURLs))
 	if len(gitURLs) > 0 || replaced > 0 {
-		parts := []string{}
+		var parts []string
 		if len(packagistPkgs) > 0 {
 			parts = append(parts, fmt.Sprintf("%d packagist", len(packagistPkgs)))
 		}
@@ -456,6 +452,7 @@ func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifes
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
 		CacheDir:     dbCommand.CacheDir,
+		Verbose:      len(globalOpts.Verbose),
 	}
 
 	httpClient, err := a.buildHTTPClient(&opts)
@@ -760,6 +757,7 @@ func (a *dbIndexArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string,
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
 		CacheDir:     dbCommand.CacheDir,
+		Verbose:      len(globalOpts.Verbose),
 	}
 
 	if _, err := a.buildHTTPClient(&opts); err != nil {

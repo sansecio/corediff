@@ -3,7 +3,6 @@ package normalize
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,22 +33,22 @@ var (
 		[]byte("#"),
 	}
 
-	// ScanExts lists file extensions to scan.
-	ScanExts = []string{"php", "phtml", "js", "htaccess", "sh"}
+	// scanExts lists file extensions to scan.
+	scanExts = []string{"php", "phtml", "js", "htaccess", "sh"}
 )
 
-// Hash computes the XXH3 hash of b.
-var Hash = xxh3.Hash
+// hashFunc computes the XXH3 hash of b.
+var hashFunc = xxh3.Hash
 
-// Line normalizes a line of code by trimming whitespace,
+// normLine normalizes a line of code by trimming whitespace,
 // stripping comments, and applying regex filters.
-func Line(b []byte) []byte {
+func normLine(b []byte) []byte {
 	b = bytes.TrimSpace(b)
 	if len(b) < minSize {
 		return b
 	}
-	for i := range skipLines {
-		if bytes.HasPrefix(b, skipLines[i]) {
+	for _, s := range skipLines {
+		if bytes.HasPrefix(b, s) {
 			return []byte{}
 		}
 	}
@@ -70,18 +69,18 @@ func HashLine(raw []byte, fn func(hash uint64, chunk []byte) bool) {
 	if len(raw) < minSize {
 		return
 	}
-	norm := Line(raw)
+	norm := normLine(raw)
 	if len(norm) < minSize {
 		return
 	}
 	// Fast path: lines within chunk threshold (vast majority) produce a
 	// single hash without going through ChunkLine.
 	if len(norm) <= chunker.ChunkThreshold {
-		fn(Hash(norm), norm)
+		fn(hashFunc(norm), norm)
 		return
 	}
 	for _, c := range chunker.ChunkLine(norm) {
-		if !fn(Hash(c), c) {
+		if !fn(hashFunc(c), c) {
 			return
 		}
 	}
@@ -89,12 +88,12 @@ func HashLine(raw []byte, fn func(hash uint64, chunk []byte) bool) {
 
 // PathHash returns the hash for a path entry (prefixed with "path:").
 func PathHash(p string) uint64 {
-	return Hash([]byte("path:" + p))
+	return hashFunc([]byte("path:" + p))
 }
 
 // HasValidExt reports whether path has a recognized code file extension.
 func HasValidExt(path string) bool {
-	return slices.Contains(ScanExts, strings.TrimLeft(filepath.Ext(path), "."))
+	return slices.Contains(scanExts, strings.TrimLeft(filepath.Ext(path), "."))
 }
 
 const MaxTokenSize = 1024 * 1024 * 10 // 10 MB
@@ -141,9 +140,5 @@ func IsValidUtf8(path string) bool {
 		return false
 	}
 
-	valid := utf8.Valid(buf)
-	if !valid {
-		fmt.Println("Invalid UTF-8:", path)
-	}
-	return valid
+	return utf8.Valid(buf)
 }

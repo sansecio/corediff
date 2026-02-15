@@ -22,8 +22,8 @@ import (
 	"github.com/gwillem/corediff/internal/normalize"
 )
 
-// SubPackage represents a composer sub-package found inside a monorepo tree.
-type SubPackage struct {
+// subPackage represents a composer sub-package found inside a monorepo tree.
+type subPackage struct {
 	Name    string // e.g. "magento/module-catalog"
 	Version string // e.g. "104.0.7"
 	Dir     string // directory within repo, e.g. "app/code/Magento/Catalog/"
@@ -176,9 +176,9 @@ func isVersionTag(name string) bool {
 // findSubPackages scans a git tree for composer.json files in subdirectories
 // and returns the sub-packages found (each with name, version, and directory).
 // The root composer.json is skipped.
-func findSubPackages(tree *object.Tree) []SubPackage {
-	var pkgs []SubPackage
-	tree.Files().ForEach(func(f *object.File) error {
+func findSubPackages(tree *object.Tree) []subPackage {
+	var pkgs []subPackage
+	if err := tree.Files().ForEach(func(f *object.File) error {
 		base := f.Name[strings.LastIndex(f.Name, "/")+1:]
 		if base != "composer.json" || f.Name == "composer.json" {
 			return nil
@@ -193,16 +193,18 @@ func findSubPackages(tree *object.Tree) []SubPackage {
 		}
 		version := composer.ParseVersion([]byte(content))
 		dir := f.Name[:strings.LastIndex(f.Name, "/")+1]
-		pkgs = append(pkgs, SubPackage{Name: name, Version: version, Dir: dir})
+		pkgs = append(pkgs, subPackage{Name: name, Version: version, Dir: dir})
 		return nil
-	})
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: scanning sub-packages: %v\n", err)
+	}
 	return pkgs
 }
 
 // resolveStoredPath returns the canonical vendor path for a file.
 // If the file is inside a sub-package, it uses vendor/<sub-package-name>/...
 // Otherwise, it falls back to the default prefix.
-func resolveStoredPath(filePath string, subPkgs []SubPackage, defaultPrefix string) string {
+func resolveStoredPath(filePath string, subPkgs []subPackage, defaultPrefix string) string {
 	for _, sp := range subPkgs {
 		if strings.HasPrefix(filePath, sp.Dir) {
 			return "vendor/" + sp.Name + "/" + filePath[len(sp.Dir):]
@@ -229,7 +231,7 @@ func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, 
 	for _, version := range versions {
 		tree, _, err := indexRef(repo, version, refs[version], db, opts, seenBlobs)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: skipping %s (%s): %v\n", version, refs[version][:minLen(refs[version], 12)], err)
+			fmt.Fprintf(os.Stderr, "warning: skipping %s (%s): %v\n", version, refs[version][:min(len(refs[version]), 12)], err)
 			continue
 		}
 
@@ -277,7 +279,7 @@ func indexRefs(repo *git.Repository, refs map[string]string, db *hashdb.HashDB, 
 	}
 }
 
-func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (*object.Tree, []SubPackage, error) {
+func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (*object.Tree, []subPackage, error) {
 	commit, err := repo.CommitObject(plumbing.NewHash(ref))
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolving commit: %w", err)
@@ -289,7 +291,7 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 	}
 
 	// Pre-scan for sub-package composer.json files to resolve canonical paths.
-	var subPkgs []SubPackage
+	var subPkgs []subPackage
 	if !opts.NoPlatform && opts.PathPrefix != "" {
 		subPkgs = findSubPackages(tree)
 	}
@@ -342,7 +344,7 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 func (opts IndexOptions) log(level int, format string, args ...any) {
 	if opts.Verbose >= level {
 		indent := strings.Repeat("  ", level)
-		fmt.Println(indent + fmt.Sprintf(format, args...))
+		fmt.Printf("%s"+format+"\n", append([]any{indent}, args...)...)
 	}
 }
 
@@ -435,12 +437,6 @@ func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts I
 	return added, total
 }
 
-func minLen(s string, n int) int {
-	if len(s) < n {
-		return len(s)
-	}
-	return n
-}
 
 // cmpVersionDesc compares two version strings in descending order.
 // Splits on "." and "-", compares segments numerically when possible.

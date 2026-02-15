@@ -46,7 +46,7 @@ func BenchmarkNormalizeLine(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		for _, line := range lines {
-			Line(line)
+			normLine(line)
 		}
 	}
 	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(lines)), "ns/line")
@@ -87,7 +87,7 @@ func BenchmarkChunkLine(b *testing.B) {
 	lines := loadFixtureLines(b)
 	var normalized [][]byte
 	for _, line := range lines {
-		n := Line(line)
+		n := normLine(line)
 		if len(n) > 0 {
 			normalized = append(normalized, n)
 		}
@@ -102,11 +102,11 @@ func BenchmarkChunkLine(b *testing.B) {
 }
 
 // Stage 3: Raw hash comparison (pre-normalized input)
-func BenchmarkHash(b *testing.B) {
+func BenchmarkHashFunc(b *testing.B) {
 	lines := loadFixtureLines(b)
 	var normalized [][]byte
 	for _, line := range lines {
-		n := Line(line)
+		n := normLine(line)
 		if len(n) > 0 {
 			normalized = append(normalized, n)
 		}
@@ -114,7 +114,7 @@ func BenchmarkHash(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		for _, line := range normalized {
-			Hash(line)
+			hashFunc(line)
 		}
 	}
 	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(normalized)), "ns/line")

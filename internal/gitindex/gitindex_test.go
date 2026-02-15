@@ -585,7 +585,7 @@ func TestFindSubPackages(t *testing.T) {
 
 	assert.Len(t, subPkgs, 2)
 
-	byName := make(map[string]SubPackage)
+	byName := make(map[string]subPackage)
 	for _, sp := range subPkgs {
 		byName[sp.Name] = sp
 	}
@@ -600,7 +600,7 @@ func TestFindSubPackages(t *testing.T) {
 }
 
 func TestResolveStoredPath(t *testing.T) {
-	subPkgs := []SubPackage{
+	subPkgs := []subPackage{
 		{Name: "magento/module-catalog", Dir: "app/code/Magento/Catalog/"},
 		{Name: "magento/module-sales", Dir: "app/code/Magento/Sales/"},
 	}

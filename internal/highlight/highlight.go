@@ -36,7 +36,6 @@ var (
 		[]byte(`shell_exec`),
 		[]byte(`passthru`),
 		[]byte(`popen`),
-		[]byte(`system(`),
 		[]byte(`proc_open`),
 		[]byte(`pcntl_exec`),
 		[]byte(`pcntl_fork`),

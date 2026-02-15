@@ -37,7 +37,7 @@ type scanArg struct {
 	IgnorePaths  bool   `short:"i" long:"ignore-paths" description:"Scan everything, not just core paths."`
 	SuspectOnly  bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
 	AllValidText bool   `short:"t" long:"text" description:"Scan all valid UTF-8 text files, instead of just files with valid prefixes."`
-	NoPlatform   bool   `long:"no-platform" description:"Don't check for app root when adding hashes. Do add file paths."`
+	NoPlatform   bool   `long:"no-platform" description:"Don't check for app root when scanning."`
 	PathFilter   string `short:"f" long:"path-filter" description:"Applies a path filter prior to diffing (e.g. vendor/magento)"`
 }
 
@@ -248,8 +248,8 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 		hits, lines := scanFileWithDB(path, db, scanBuf)
 
 		if args.SuspectOnly {
-			hitsFiltered := []int{}
-			linesFiltered := [][]byte{}
+			var hitsFiltered []int
+			var linesFiltered [][]byte
 			for i, lineNo := range hits {
 				if highlight.ShouldHighlight(lines[i]) {
 					hitsFiltered = append(hitsFiltered, lineNo)

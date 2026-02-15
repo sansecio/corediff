@@ -107,7 +107,7 @@ func parseRepos(data []byte) ([]Repository, error) {
 		var repos []Repository
 		for _, r := range objRepos {
 			if r.Type == "composer" {
-				r.URL = NormalizeRepoURL(r.URL)
+				r.URL = normalizeRepoURL(r.URL)
 				repos = append(repos, r)
 			}
 		}
@@ -122,15 +122,15 @@ func parseRepos(data []byte) ([]Repository, error) {
 	var repos []Repository
 	for _, r := range arrRepos {
 		if r.Type == "composer" {
-			r.URL = NormalizeRepoURL(r.URL)
+			r.URL = normalizeRepoURL(r.URL)
 			repos = append(repos, r)
 		}
 	}
 	return repos, nil
 }
 
-// NormalizeRepoURL strips trailing /packages.json and trailing slashes from a repo URL.
-func NormalizeRepoURL(u string) string {
+// normalizeRepoURL strips trailing /packages.json and trailing slashes from a repo URL.
+func normalizeRepoURL(u string) string {
 	u = strings.TrimSuffix(u, "/packages.json")
 	u = strings.TrimRight(u, "/")
 	return u

@@ -35,7 +35,7 @@ func init() {
 }
 
 func rotateN(h uint64, n int) uint64 {
-	for i := 0; i < n; i++ {
+	for range n {
 		h = (h << 1) | (h >> 63)
 	}
 	return h
@@ -56,7 +56,7 @@ func benchChunk(data []byte, p cdcParams) [][]byte {
 	var hash uint64
 	start := 0
 
-	for i := 0; i < len(data); i++ {
+	for i := range len(data) {
 		hash = (hash << 1) | (hash >> 63)
 		hash ^= benchTable[data[i]]
 

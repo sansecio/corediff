@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLine(t *testing.T) {
+func TestNormLine(t *testing.T) {
 	tests := []struct {
 		arg  string
 		want string
@@ -20,7 +20,7 @@ func TestLine(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.arg), func(t *testing.T) {
-			assert.Equal(t, tt.want, string(Line([]byte(tt.arg))))
+			assert.Equal(t, tt.want, string(normLine([]byte(tt.arg))))
 		})
 	}
 }
@@ -97,7 +97,7 @@ func TestHashSanity(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.args), func(t *testing.T) {
-			got := fmt.Sprintf("%016x", Hash(tt.args))
+			got := fmt.Sprintf("%016x", hashFunc(tt.args))
 			assert.Equal(t, tt.want, got)
 		})
 	}

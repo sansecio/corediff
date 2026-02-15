@@ -15,19 +15,19 @@ var (
 	alarm     = color.New(color.FgHiWhite, color.BgHiRed, color.Bold).SprintFunc()
 	green     = color.New(color.FgGreen).SprintFunc()
 
-	logLevel = 1
+	verbose bool
 )
 
 func logVerbose(a ...any) {
-	if logLevel >= 3 {
+	if verbose {
 		fmt.Println(a...)
 	}
 }
 
-// applyVerbose sets logLevel from the global -v flag count.
+// applyVerbose sets verbose from the global -v flag count.
 func applyVerbose() {
 	if len(globalOpts.Verbose) >= 1 {
-		logLevel = 3
+		verbose = true
 	}
 }
 
@@ -45,16 +45,6 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 	t.logf("[%d] %s %s", resp.StatusCode, req.Method, req.URL)
 	return resp, nil
-}
-
-// newLoggingHTTPClient returns an *http.Client that logs requests via logf.
-func newLoggingHTTPClient(logf func(string, ...any)) *http.Client {
-	return &http.Client{
-		Transport: &loggingTransport{
-			base: http.DefaultTransport,
-			logf: logf,
-		},
-	}
 }
 
 func init() {

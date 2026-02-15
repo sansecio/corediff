@@ -3,7 +3,9 @@ package manifest
 import (
 	"bufio"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -150,11 +152,7 @@ func (m *Manifest) TrackedPackages() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	result := make([]string, 0, len(m.tracked))
-	for pkg := range m.tracked {
-		result = append(result, pkg)
-	}
-	return result
+	return slices.Collect(maps.Keys(m.tracked))
 }
 
 // Packages returns the set of unique package names in the manifest.
@@ -169,11 +167,7 @@ func (m *Manifest) Packages() []string {
 		}
 	}
 
-	result := make([]string, 0, len(pkgs))
-	for pkg := range pkgs {
-		result = append(result, pkg)
-	}
-	return result
+	return slices.Collect(maps.Keys(pkgs))
 }
 
 // Close releases the file lock and closes the underlying file.
@@ -181,6 +175,9 @@ func (m *Manifest) Close() error {
 	if m.file == nil {
 		return nil
 	}
-	syscall.Flock(int(m.file.Fd()), syscall.LOCK_UN)
+	if err := syscall.Flock(int(m.file.Fd()), syscall.LOCK_UN); err != nil {
+		m.file.Close()
+		return fmt.Errorf("unlocking manifest: %w", err)
+	}
 	return m.file.Close()
 }

@@ -433,7 +433,7 @@ func TestParseLockPackages(t *testing.T) {
 	assert.Equal(t, "def", pkgs[0].Dist.Reference)
 }
 
-func TestNormalizeRepoURL(t *testing.T) {
+func Test_normalizeRepoURL(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
@@ -445,7 +445,7 @@ func TestNormalizeRepoURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.want, NormalizeRepoURL(tt.input))
+			assert.Equal(t, tt.want, normalizeRepoURL(tt.input))
 		})
 	}
 }
