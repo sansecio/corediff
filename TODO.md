@@ -103,3 +103,5 @@ Separate tool that pipes corediff output through an LLM for risk prioritization.
 
 - [ ] git indexer does not correctly identify packagist packages from monorepo (see magento2), or at least no write them to the manifest
 - [ ] if packages are embedded in a monorepo, do their relative paths match the ones if they had been installed via composer? that is important since most of our target installs use composer and we only analyze a file if the relative path has been registered
+- [ ] zip downloads dont end up in cache dir
+- [ ] merge various logger functions
