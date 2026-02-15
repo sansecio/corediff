@@ -60,6 +60,7 @@ func CloneAndIndex(repoURL string, refs map[string]string, db *hashdb.HashDB, op
 	}
 	defer os.RemoveAll(tmpDir)
 
+	opts.log(1, "cloning %s", repoURL)
 	repo, err := git.PlainClone(tmpDir, true, &git.CloneOptions{
 		URL: repoURL,
 	})
@@ -81,6 +82,7 @@ func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *
 	// Try opening existing repo first; fetch to update refs
 	repo, err = git.PlainOpen(cloneDir)
 	if err != nil {
+		opts.log(1, "cloning %s", repoURL)
 		repo, err = git.PlainClone(cloneDir, true, &git.CloneOptions{
 			URL: repoURL,
 		})
@@ -88,6 +90,7 @@ func CloneAndIndexWithDir(repoURL, cloneDir string, refs map[string]string, db *
 			return nil, fmt.Errorf("cloning %s: %w", repoURL, err)
 		}
 	} else {
+		opts.log(1, "fetching %s", repoURL)
 		err = repo.Fetch(&git.FetchOptions{RemoteName: "origin"})
 		if err != nil && err != git.NoErrAlreadyUpToDate {
 			return nil, fmt.Errorf("fetching %s: %w", repoURL, err)
@@ -107,6 +110,7 @@ func RefsFromTags(repoURL, cloneDir string, opts IndexOptions) (*git.Repository,
 
 	repo, err = git.PlainOpen(cloneDir)
 	if err != nil {
+		opts.log(1, "cloning %s", repoURL)
 		repo, err = git.PlainClone(cloneDir, true, &git.CloneOptions{
 			URL: repoURL,
 		})
@@ -114,6 +118,7 @@ func RefsFromTags(repoURL, cloneDir string, opts IndexOptions) (*git.Repository,
 			return nil, nil, fmt.Errorf("cloning %s: %w", repoURL, err)
 		}
 	} else {
+		opts.log(1, "fetching %s", repoURL)
 		err = repo.Fetch(&git.FetchOptions{RemoteName: "origin"})
 		if err != nil && err != git.NoErrAlreadyUpToDate {
 			return nil, nil, fmt.Errorf("fetching %s: %w", repoURL, err)

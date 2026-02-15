@@ -153,8 +153,6 @@ func (a *dbAddArg) indexVersions(pkg string, versions []packagist.Version, db *h
 			}
 		}
 
-		logVerbose(fmt.Sprintf("  cloning %s", repoURL))
-
 		var result *gitindex.IndexResult
 		var gitErr error
 		if dbCommand.CacheDir != "" {
