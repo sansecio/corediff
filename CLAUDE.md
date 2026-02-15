@@ -1,6 +1,6 @@
 # Corediff
 
-Forensic tool to detect unauthorized code modifications in open-source codebases (Magento, WordPress). Compares lines of code against a database of legitimate code hashes (XXH3-64) to identify tampering or malware.
+Forensic tool to detect unauthorized code modifications in open-source codebases (Magento, WordPress). Compares lines of code against a database of legitimate code hashes to identify tampering or malware.
 
 ## Project structure
 
@@ -20,7 +20,8 @@ Forensic tool to detect unauthorized code modifications in open-source codebases
 
 - Single `main` package in `cmd/`
 - CLI: `go-flags` with subcommands (scan, db index, db merge, db info)
-- Hash format: binary little-endian uint64 (XXH3-64), type `hashDB = map[uint64]struct{}`
+- Hash format: binary little-endian uint64, type `hashDB = map[uint64]struct{}`
+- Hash algorithm: XXH3 for new databases (CDDB v2), xxhash64 for legacy/v1 databases (auto-detected on load)
 - Normalization: strips whitespace, comments, applies regex filters before hashing
 - Self-update via `go-selfupdate`
 
@@ -35,7 +36,8 @@ When adding hashes with `index`, paths from `excludePaths` (e.g. `generated/**`,
 
 ## Key dependencies
 
-- `zeebo/xxh3` — Fast hashing (XXH3-64)
+- `zeebo/xxh3` — Fast hashing for new databases (XXH3)
+- `cespare/xxhash/v2` — Legacy hashing for old databases (xxhash64)
 - `jessevdk/go-flags` — CLI parsing
 - `fatih/color` — Terminal colors
 - `gobwas/glob` — Path pattern matching

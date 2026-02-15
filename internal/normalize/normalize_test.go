@@ -7,7 +7,6 @@ import (
 
 	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/stretchr/testify/assert"
-	"github.com/zeebo/xxh3"
 )
 
 func TestLine(t *testing.T) {
@@ -79,7 +78,7 @@ func TestHashSanity(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.args), func(t *testing.T) {
-			got := fmt.Sprintf("%016x", xxh3.Hash(tt.args))
+			got := fmt.Sprintf("%016x", Hash(tt.args))
 			assert.Equal(t, tt.want, got)
 		})
 	}

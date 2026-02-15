@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	xxhash "github.com/cespare/xxhash/v2"
 	"github.com/gwillem/corediff/internal/chunker"
 	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/zeebo/xxh3"
@@ -59,9 +60,18 @@ func Line(b []byte) []byte {
 	return b
 }
 
-func hash(b []byte) uint64 {
-	return xxh3.Hash(b)
-}
+// Hash computes the hash of b using the active algorithm.
+// Defaults to XXH3 (for new databases). Call UseXXHash64() to switch
+// to xxhash64 for compatibility with legacy databases.
+var Hash = xxh3.Hash
+
+// UseXXHash64 switches the hash function to xxhash64 (cespare/xxhash/v2),
+// used by legacy and CDDB v1 databases.
+func UseXXHash64() { Hash = xxhash.Sum64 }
+
+// UseXXH3 switches the hash function to XXH3 (zeebo/xxh3),
+// used by CDDB v2+ databases. This is the default.
+func UseXXH3() { Hash = xxh3.Hash }
 
 // HashLine normalizes a line, then hashes it (chunking if minified).
 // Calls fn for each hash produced. fn returns true to continue, false to stop.
@@ -77,11 +87,11 @@ func HashLine(raw []byte, fn func(uint64) bool) {
 	// Fast path: lines within chunk threshold (vast majority) produce a
 	// single hash without going through ChunkLine.
 	if len(norm) <= chunker.ChunkThreshold {
-		fn(xxh3.Hash(norm))
+		fn(Hash(norm))
 		return
 	}
 	for _, c := range chunker.ChunkLine(norm) {
-		if !fn(xxh3.Hash(c)) {
+		if !fn(Hash(c)) {
 			return
 		}
 	}
@@ -89,7 +99,7 @@ func HashLine(raw []byte, fn func(uint64) bool) {
 
 // PathHash returns the hash for a path entry (prefixed with "path:").
 func PathHash(p string) uint64 {
-	return xxh3.Hash([]byte("path:" + p))
+	return Hash([]byte("path:" + p))
 }
 
 // HasValidExt reports whether path has a recognized code file extension.

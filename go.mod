@@ -3,6 +3,7 @@ module github.com/gwillem/corediff
 go 1.26
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/fatih/color v1.16.0
 	github.com/go-git/go-git/v5 v5.16.5
 	github.com/gobwas/glob v0.2.3

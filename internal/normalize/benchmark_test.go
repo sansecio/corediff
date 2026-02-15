@@ -8,7 +8,6 @@ import (
 
 	"github.com/gwillem/corediff/internal/chunker"
 	"github.com/gwillem/corediff/internal/hashdb"
-	"github.com/zeebo/xxh3"
 )
 
 func loadFixtureLines(b *testing.B) [][]byte {
@@ -116,7 +115,7 @@ func BenchmarkHash(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		for _, line := range normalized {
-			xxh3.Hash(line)
+			Hash(line)
 		}
 	}
 	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(normalized)), "ns/line")

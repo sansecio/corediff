@@ -2,7 +2,8 @@ package hashdb
 
 // HashDB stores precomputed hashes using a map for O(1) lookups.
 type HashDB struct {
-	set map[uint64]struct{}
+	set     map[uint64]struct{}
+	Version uint32 // CDDB version (0 = legacy, 1 = xxhash64, 2 = xxh3)
 }
 
 // New creates an empty HashDB.
@@ -31,4 +32,10 @@ func (db *HashDB) Merge(other *HashDB) {
 // Len returns the number of unique entries.
 func (db *HashDB) Len() int {
 	return len(db.set)
+}
+
+// UsesXXHash64 reports whether this database uses the legacy xxhash64 algorithm
+// (version 0 = legacy headerless, version 1 = CDDB v1).
+func (db *HashDB) UsesXXHash64() bool {
+	return db.Version <= 1
 }

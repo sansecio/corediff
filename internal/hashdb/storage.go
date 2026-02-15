@@ -9,8 +9,10 @@ import (
 
 const (
 	dbMagic    = "CDDB"
-	dbVersion  = 1
+	dbVersion  = 2  // current version written by Save (v2 = XXH3)
 	headerSize = 16 // 4 magic + 4 version + 8 count
+
+	maxSupportedVersion = 2
 )
 
 type dbHeader struct {
@@ -20,8 +22,10 @@ type dbHeader struct {
 }
 
 // Open opens a hash database from path into memory.
+// The returned HashDB has its Version field set:
+// 0 = legacy (no header, xxhash64), 1 = CDDB v1 (xxhash64), 2 = CDDB v2 (xxh3).
 func Open(path string) (*HashDB, error) {
-	data, err := readDB(path)
+	data, version, err := readDB(path)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +33,7 @@ func Open(path string) (*HashDB, error) {
 	for _, h := range data {
 		set[h] = struct{}{}
 	}
-	return &HashDB{set: set}, nil
+	return &HashDB{set: set, Version: version}, nil
 }
 
 // Save writes the database to path atomically in the CDDB format.
@@ -64,19 +68,19 @@ func (db *HashDB) Save(path string) error {
 	return os.Rename(f.Name(), path)
 }
 
-func readDB(path string) ([]uint64, error) {
+func readDB(path string) ([]uint64, uint32, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	size := fi.Size()
 	if size == 0 {
-		return nil, nil
+		return nil, dbVersion, nil
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 
@@ -84,7 +88,7 @@ func readDB(path string) ([]uint64, error) {
 	var magic [4]byte
 	if size >= 4 {
 		if _, err := f.Read(magic[:]); err != nil {
-			return nil, fmt.Errorf("reading magic: %w", err)
+			return nil, 0, fmt.Errorf("reading magic: %w", err)
 		}
 	}
 
@@ -96,52 +100,52 @@ func readDB(path string) ([]uint64, error) {
 	return readLegacy(f, size)
 }
 
-func readCDDB(f *os.File, size int64) ([]uint64, error) {
+func readCDDB(f *os.File, size int64) ([]uint64, uint32, error) {
 	if size < headerSize {
-		return nil, fmt.Errorf("file too small for CDDB header")
+		return nil, 0, fmt.Errorf("file too small for CDDB header")
 	}
 
 	// Seek back to start to read full header
 	if _, err := f.Seek(0, 0); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var hdr dbHeader
 	if err := binary.Read(f, binary.LittleEndian, &hdr); err != nil {
-		return nil, fmt.Errorf("reading header: %w", err)
+		return nil, 0, fmt.Errorf("reading header: %w", err)
 	}
-	if hdr.Version != dbVersion {
-		return nil, fmt.Errorf("unsupported database version %d (max supported: %d)", hdr.Version, dbVersion)
+	if hdr.Version > maxSupportedVersion {
+		return nil, 0, fmt.Errorf("unsupported database version %d (max supported: %d)", hdr.Version, maxSupportedVersion)
 	}
 	dataSize := size - headerSize
 	if dataSize%8 != 0 {
-		return nil, fmt.Errorf("invalid database size, corrupt?")
+		return nil, 0, fmt.Errorf("invalid database size, corrupt?")
 	}
 	count := dataSize / 8
 	if count != int64(hdr.Count) {
-		return nil, fmt.Errorf("header count %d doesn't match data (%d entries)", hdr.Count, count)
+		return nil, 0, fmt.Errorf("header count %d doesn't match data (%d entries)", hdr.Count, count)
 	}
 	data := make([]uint64, count)
 	if err := binary.Read(f, binary.LittleEndian, data); err != nil {
-		return nil, fmt.Errorf("reading data: %w", err)
+		return nil, 0, fmt.Errorf("reading data: %w", err)
 	}
-	return data, nil
+	return data, hdr.Version, nil
 }
 
-func readLegacy(f *os.File, size int64) ([]uint64, error) {
+func readLegacy(f *os.File, size int64) ([]uint64, uint32, error) {
 	if size%8 != 0 {
-		return nil, fmt.Errorf("invalid legacy database size (%d bytes, not a multiple of 8)", size)
+		return nil, 0, fmt.Errorf("invalid legacy database size (%d bytes, not a multiple of 8)", size)
 	}
 
 	// Seek back to start — we already read 4 bytes for magic detection
 	if _, err := f.Seek(0, 0); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	count := size / 8
 	data := make([]uint64, count)
 	if err := binary.Read(f, binary.LittleEndian, data); err != nil {
-		return nil, fmt.Errorf("reading legacy data: %w", err)
+		return nil, 0, fmt.Errorf("reading legacy data: %w", err)
 	}
-	return data, nil
+	return data, 0, nil // version 0 = legacy (xxhash64)
 }

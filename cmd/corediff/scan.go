@@ -61,6 +61,10 @@ func (s *scanArg) Execute(_ []string) error {
 		log.Fatal("Error loading database:", err)
 	}
 
+	if db.UsesXXHash64() {
+		normalize.UseXXHash64()
+	}
+
 	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", db.Len(), " precomputed hashes. (C) 2023-2026 Willem de Groot"))
 	fmt.Println("Using database:", s.Database)
 
