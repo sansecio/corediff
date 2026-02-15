@@ -214,6 +214,13 @@ func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *manife
 		pkg, pinVersion = pkg[:idx], pkg[idx+1:]
 	}
 
+	// Track bare (unpinned) packages for automatic updates
+	if pinVersion == "" {
+		if err := mf.MarkTracked(pkg); err != nil {
+			return fmt.Errorf("marking tracked: %w", err)
+		}
+	}
+
 	opts := gitindex.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
@@ -397,9 +404,9 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manifes
 }
 
 func (a *dbAddArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
-	pkgs := mf.Packages()
+	pkgs := mf.TrackedPackages()
 	if len(pkgs) == 0 {
-		return fmt.Errorf("manifest is empty — nothing to update. Index packages first with --packagist, --composer, or a git URL")
+		return fmt.Errorf("no tracked packages — nothing to update. Add packages with --packagist or a git URL first")
 	}
 
 	// Partition into git URLs and packagist package names.
@@ -765,6 +772,10 @@ func (a *dbAddArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string, m
 
 	if _, err := a.buildHTTPClient(&opts); err != nil {
 		return err
+	}
+
+	if err := mf.MarkTracked(url); err != nil {
+		return fmt.Errorf("marking tracked: %w", err)
 	}
 
 	oldSize := db.Len()

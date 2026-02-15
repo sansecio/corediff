@@ -9,14 +9,17 @@ import (
 	"syscall"
 )
 
-// Manifest tracks which package@version pairs have been indexed and which
-// packages are replaced by a monorepo. Backed by an append-only text file.
-// Indexed entries use "package@version" format; replace entries use "replace:package" format.
+// Manifest tracks which package@version pairs have been indexed, which
+// packages are replaced by a monorepo, and which packages are tracked for
+// automatic updates. Backed by an append-only text file.
+// Indexed entries use "package@version" format; replace entries use "replace:package" format;
+// tracked entries use "track:package" format.
 type Manifest struct {
 	mu       sync.Mutex
 	path     string
 	indexed  map[string]struct{} // "package@version"
 	replaced map[string]struct{} // "package-name" (no version)
+	tracked  map[string]struct{} // bare package name or git URL
 	file     *os.File            // kept open for flock
 }
 
@@ -44,6 +47,7 @@ func Load(path string) (*Manifest, error) {
 
 	indexed := make(map[string]struct{})
 	replaced := make(map[string]struct{})
+	tracked := make(map[string]struct{})
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -52,6 +56,8 @@ func Load(path string) (*Manifest, error) {
 		}
 		if pkg, ok := strings.CutPrefix(line, "replace:"); ok {
 			replaced[pkg] = struct{}{}
+		} else if pkg, ok := strings.CutPrefix(line, "track:"); ok {
+			tracked[pkg] = struct{}{}
 		} else if strings.Contains(line, "@") {
 			indexed[line] = struct{}{}
 		}
@@ -65,6 +71,7 @@ func Load(path string) (*Manifest, error) {
 		path:     path,
 		indexed:  indexed,
 		replaced: replaced,
+		tracked:  tracked,
 		file:     f,
 	}, nil
 }
@@ -119,6 +126,35 @@ func (m *Manifest) MarkReplaced(pkg string) error {
 	}
 	m.replaced[pkg] = struct{}{}
 	return nil
+}
+
+// MarkTracked records that a package should be tracked for automatic updates.
+// The entry is appended to the file immediately.
+func (m *Manifest) MarkTracked(pkg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.tracked[pkg]; ok {
+		return nil // already recorded
+	}
+
+	if _, err := fmt.Fprintln(m.file, "track:"+pkg); err != nil {
+		return fmt.Errorf("writing to manifest: %w", err)
+	}
+	m.tracked[pkg] = struct{}{}
+	return nil
+}
+
+// TrackedPackages returns all packages marked for tracking.
+func (m *Manifest) TrackedPackages() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := make([]string, 0, len(m.tracked))
+	for pkg := range m.tracked {
+		result = append(result, pkg)
+	}
+	return result
 }
 
 // Packages returns the set of unique package names in the manifest.

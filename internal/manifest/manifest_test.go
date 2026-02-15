@@ -215,6 +215,88 @@ func TestLoadWithReplaceEntries(t *testing.T) {
 	assert.NotContains(t, pkgs, "magento/module-sales")
 }
 
+func TestMarkTracked(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.manifest")
+
+	m, err := Load(path)
+	require.NoError(t, err)
+
+	assert.Empty(t, m.TrackedPackages())
+
+	err = m.MarkTracked("psr/log")
+	require.NoError(t, err)
+
+	pkgs := m.TrackedPackages()
+	assert.Len(t, pkgs, 1)
+	assert.Contains(t, pkgs, "psr/log")
+
+	// Idempotent
+	err = m.MarkTracked("psr/log")
+	require.NoError(t, err)
+	assert.Len(t, m.TrackedPackages(), 1)
+
+	m.Close()
+
+	// Verify persistence: reload and check
+	m2, err := Load(path)
+	require.NoError(t, err)
+	defer m2.Close()
+
+	pkgs = m2.TrackedPackages()
+	assert.Len(t, pkgs, 1)
+	assert.Contains(t, pkgs, "psr/log")
+}
+
+func TestTrackedIdempotentFileWrites(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.manifest")
+
+	m, err := Load(path)
+	require.NoError(t, err)
+
+	require.NoError(t, m.MarkTracked("psr/log"))
+	require.NoError(t, m.MarkTracked("psr/log")) // duplicate
+	m.Close()
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, "track:psr/log\n", string(data))
+}
+
+func TestLoadWithTrackEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.manifest")
+
+	content := "vendor/a@1.0.0\ntrack:psr/log\nreplace:magento/module-catalog\ntrack:https://github.com/example/repo.git\nvendor/b@2.0.0\n"
+	err := os.WriteFile(path, []byte(content), 0o644)
+	require.NoError(t, err)
+
+	m, err := Load(path)
+	require.NoError(t, err)
+	defer m.Close()
+
+	// Indexed entries still work
+	assert.True(t, m.IsIndexed("vendor/a", "1.0.0"))
+	assert.True(t, m.IsIndexed("vendor/b", "2.0.0"))
+
+	// Replace entries are loaded
+	assert.True(t, m.IsReplaced("magento/module-catalog"))
+
+	// Tracked entries are loaded
+	pkgs := m.TrackedPackages()
+	assert.Len(t, pkgs, 2)
+	assert.Contains(t, pkgs, "psr/log")
+	assert.Contains(t, pkgs, "https://github.com/example/repo.git")
+
+	// Packages() should not include track entries
+	allPkgs := m.Packages()
+	assert.Contains(t, allPkgs, "vendor/a")
+	assert.Contains(t, allPkgs, "vendor/b")
+	assert.NotContains(t, allPkgs, "psr/log")
+}
+
 func TestReplacedIdempotentFileWrites(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.manifest")
