@@ -42,6 +42,7 @@ type IndexOptions struct {
 	PathPrefix      string            // prepended to file paths for path hashes (e.g. "vendor/psr/log/")
 	Verbose         int               // verbosity level: 1=-v (versions), 3=-vvv (files), 4=-vvvv (lines)
 	HTTP            *http.Client      // optional; defaults to http.DefaultClient
+	CacheDir        string            // if set, cache zip downloads here
 	OnVersionDone   func(version string)                // called after each version is indexed
 	OnSubPackage    func(name, version string)          // called for each sub-package found in a version
 	CollectLockDeps bool                                // collect composer.lock deps across all versions
@@ -306,9 +307,9 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 
 	pkg := strings.TrimSuffix(strings.TrimPrefix(opts.PathPrefix, "vendor/"), "/")
 	if skippedFiles > 0 {
-		opts.log(1, "  indexed %s@%s (%d new, %d total, %d files skipped, %.0f hash/sec)", pkg, version, newHashes, totalHashes, skippedFiles, rate)
+		opts.log(1, "indexed %s@%s (%d new, %d total, %d files skipped, %.0f hash/sec)", pkg, version, newHashes, totalHashes, skippedFiles, rate)
 	} else {
-		opts.log(1, "  indexed %s@%s (%d new, %d total, %.0f hash/sec)", pkg, version, newHashes, totalHashes, rate)
+		opts.log(1, "indexed %s@%s (%d new, %d total, %.0f hash/sec)", pkg, version, newHashes, totalHashes, rate)
 	}
 
 	if err == nil && opts.OnVersionDone != nil {
@@ -330,7 +331,8 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 
 func (opts IndexOptions) log(level int, format string, args ...any) {
 	if opts.Verbose >= level {
-		fmt.Println(fmt.Sprintf(format, args...))
+		indent := strings.Repeat("  ", level)
+		fmt.Println(indent + fmt.Sprintf(format, args...))
 	}
 }
 
@@ -358,7 +360,7 @@ func (opts IndexOptions) InstallHTTPTransport() {
 // seenBlobs tracks git blob hashes already processed; unchanged files across versions are skipped.
 func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (int, int) {
 	if !opts.AllValidText && !normalize.HasValidExt(f.Name) {
-		opts.log(3, "    skip %s (no valid ext)", f.Name)
+		opts.log(3, "skip %s (no valid ext)", f.Name)
 		return 0, 0
 	}
 
@@ -382,7 +384,7 @@ func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts I
 		return 0, 0
 	}
 	if !utf8.Valid(buf[:n]) {
-		opts.log(3, "    skip %s (invalid utf8)", f.Name)
+		opts.log(3, "skip %s (invalid utf8)", f.Name)
 		if seenBlobs != nil {
 			seenBlobs[f.Hash] = struct{}{} // don't re-check in later versions
 		}
@@ -392,9 +394,9 @@ func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts I
 	// Add path hash unless NoPlatform
 	if !opts.NoPlatform {
 		db.Add(normalize.PathHash(storedPath))
-		opts.log(3, "    hash %s", storedPath)
+		opts.log(3, "hash %s", storedPath)
 	} else {
-		opts.log(3, "    hash %s", f.Name)
+		opts.log(3, "hash %s", f.Name)
 	}
 
 	// Re-open reader and hash all lines

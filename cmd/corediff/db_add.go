@@ -224,6 +224,7 @@ func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *manife
 	opts := gitindex.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
+		CacheDir:     dbCommand.CacheDir,
 	}
 
 	httpClient, err := a.buildHTTPClient(&opts)
@@ -308,6 +309,7 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manifes
 	opts := gitindex.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
+		CacheDir:     dbCommand.CacheDir,
 	}
 
 	httpClient, err := a.buildHTTPClient(&opts)
@@ -442,6 +444,7 @@ func (a *dbAddArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifest.
 	opts := gitindex.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
+		CacheDir:     dbCommand.CacheDir,
 	}
 
 	httpClient, err := a.buildHTTPClient(&opts)
@@ -768,6 +771,7 @@ func (a *dbAddArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string, m
 	opts := gitindex.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
+		CacheDir:     dbCommand.CacheDir,
 	}
 
 	if _, err := a.buildHTTPClient(&opts); err != nil {

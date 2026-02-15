@@ -215,6 +215,35 @@ func TestIndexZip_NoPlatform(t *testing.T) {
 	assert.False(t, db.Contains(normalize.PathHash("index.php")))
 }
 
+func TestIndexZip_Cache(t *testing.T) {
+	zipData := createTestZip(t, map[string]string{
+		"index.php": "<?php\necho 'cached';\n",
+	})
+
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write(zipData)
+	}))
+	defer srv.Close()
+
+	cacheDir := t.TempDir()
+
+	// First call: downloads and caches
+	db := hashdb.New()
+	err := IndexZip(srv.URL+"/test.zip", db, IndexOptions{CacheDir: cacheDir})
+	require.NoError(t, err)
+	assert.Equal(t, 1, hits)
+	assert.Greater(t, db.Len(), 0)
+
+	// Second call: should use cache, no extra HTTP request
+	db2 := hashdb.New()
+	err = IndexZip(srv.URL+"/test.zip", db2, IndexOptions{CacheDir: cacheDir})
+	require.NoError(t, err)
+	assert.Equal(t, 1, hits) // still 1 — cache hit
+	assert.Equal(t, db.Len(), db2.Len())
+}
+
 func TestCloneAndIndex_UnreachableRef(t *testing.T) {
 	files := map[string]string{
 		"index.php": "<?php\necho 'test';\n",

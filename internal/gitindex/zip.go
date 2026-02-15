@@ -3,8 +3,12 @@ package gitindex
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -14,21 +18,11 @@ import (
 
 const maxZipSize = 100 * 1024 * 1024 // 100 MB
 
-// IndexZip downloads a zip from zipURL and indexes its contents into db.
+// IndexZip downloads a zip from zipURL (or reads from cache) and indexes its contents into db.
 func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
-	resp, err := opts.httpClient().Get(zipURL)
+	data, err := fetchZip(zipURL, opts)
 	if err != nil {
-		return fmt.Errorf("downloading %s: %w", zipURL, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("downloading %s: HTTP %d", zipURL, resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxZipSize))
-	if err != nil {
-		return fmt.Errorf("reading zip: %w", err)
+		return err
 	}
 
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -49,7 +43,7 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 		}
 
 		if !opts.AllValidText && !normalize.HasValidExt(name) {
-			opts.log(3,"    skip %s (no valid ext)", name)
+			opts.log(3, "skip %s (no valid ext)", name)
 			continue
 		}
 
@@ -66,7 +60,7 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 			continue
 		}
 		if !utf8.Valid(buf[:n]) {
-			opts.log(3,"    skip %s (invalid utf8)", name)
+			opts.log(3, "skip %s (invalid utf8)", name)
 			rc.Close()
 			continue
 		}
@@ -81,9 +75,9 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 		if !opts.NoPlatform {
 			storedPath := opts.PathPrefix + name
 			db.Add(normalize.PathHash(storedPath))
-			opts.log(3,"    hash %s", storedPath)
+			opts.log(3, "hash %s", storedPath)
 		} else {
-			opts.log(3,"    hash %s", name)
+			opts.log(3, "hash %s", name)
 		}
 
 		var lineLogf func(string, ...any)
@@ -97,6 +91,56 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 	}
 
 	return nil
+}
+
+// fetchZip returns the zip data for zipURL, using the cache dir if configured.
+func fetchZip(zipURL string, opts IndexOptions) ([]byte, error) {
+	if opts.CacheDir != "" {
+		cachePath := zipCachePath(opts.CacheDir, zipURL)
+		if data, err := os.ReadFile(cachePath); err == nil {
+			opts.log(3, "cache hit %s", zipURL)
+			return data, nil
+		}
+
+		data, err := downloadZip(zipURL, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+			return data, nil // download succeeded, cache write failed — continue
+		}
+		if err := os.WriteFile(cachePath, data, 0o644); err != nil {
+			opts.log(1, "warning: caching zip: %v", err)
+		}
+		return data, nil
+	}
+
+	return downloadZip(zipURL, opts)
+}
+
+func downloadZip(zipURL string, opts IndexOptions) ([]byte, error) {
+	resp, err := opts.httpClient().Get(zipURL)
+	if err != nil {
+		return nil, fmt.Errorf("downloading %s: %w", zipURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("downloading %s: HTTP %d", zipURL, resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxZipSize))
+	if err != nil {
+		return nil, fmt.Errorf("reading zip: %w", err)
+	}
+	return data, nil
+}
+
+// zipCachePath returns a deterministic cache file path for a zip URL.
+func zipCachePath(cacheDir, zipURL string) string {
+	h := sha256.Sum256([]byte(zipURL))
+	return filepath.Join(cacheDir, "zip", hex.EncodeToString(h[:12])+".zip")
 }
 
 // commonRootPrefix finds a shared directory prefix across all zip entries.
