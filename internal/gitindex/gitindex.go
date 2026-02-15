@@ -40,6 +40,7 @@ type IndexOptions struct {
 	NoPlatform      bool
 	AllValidText    bool
 	PathPrefix      string            // prepended to file paths for path hashes (e.g. "vendor/psr/log/")
+	RepoName        string            // display name for log lines; used when PathPrefix yields no package name
 	Verbose         int               // verbosity level: 1=-v (versions), 3=-vvv (files), 4=-vvvv (lines)
 	HTTP            *http.Client      // optional; defaults to http.DefaultClient
 	CacheDir        string            // if set, cache zip downloads here
@@ -312,6 +313,9 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 	rate := float64(totalHashes) / max(elapsed.Seconds(), 0.001)
 
 	pkg := strings.TrimSuffix(strings.TrimPrefix(opts.PathPrefix, "vendor/"), "/")
+	if pkg == "" {
+		pkg = opts.RepoName
+	}
 	if skippedFiles > 0 {
 		opts.log(1, "indexed %s@%s (%d new, %d total, %d files skipped, %.0f hash/sec)", pkg, version, newHashes, totalHashes, skippedFiles, rate)
 	} else {

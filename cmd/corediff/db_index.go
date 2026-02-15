@@ -582,6 +582,7 @@ func (a *dbIndexArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manife
 
 	// Detect composer package name for path prefix.
 	pkgOpts := opts
+	pkgOpts.RepoName = url
 	if !opts.NoPlatform && opts.PathPrefix == "" {
 		pkgOpts.PathPrefix = readComposerPathPrefix(repo)
 	}
