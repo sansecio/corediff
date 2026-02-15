@@ -82,13 +82,14 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 			opts.log(3, "hash %s", name)
 		}
 
-		var lineLogf func(string, ...any)
-		if opts.Verbose >= 4 {
-			lineLogf = func(format string, args ...any) {
-				fmt.Println(fmt.Sprintf(format, args...))
+		normalize.HashReader(rc, func(h uint64, rawLine []byte) {
+			if !db.Contains(h) {
+				db.Add(h)
 			}
-		}
-		normalize.HashReader(rc, db, lineLogf, scanBuf)
+			if opts.Verbose >= 4 {
+				fmt.Printf("      %016x %s\n", h, rawLine)
+			}
+		}, scanBuf)
 		rc.Close()
 	}
 

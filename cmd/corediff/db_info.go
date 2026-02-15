@@ -22,7 +22,18 @@ func (a *dbInfoArg) Execute(_ []string) error {
 	}
 
 	fmt.Printf("Database:  %s\n", dbPath)
-	fmt.Printf("Format:    CDDB v1\n")
+	var format string
+	switch db.Version {
+	case 0:
+		format = "legacy (xxhash64, no header)"
+	case 1:
+		format = "CDDB v1 (xxhash64)"
+	case 2:
+		format = "CDDB v2 (xxh3)"
+	default:
+		format = fmt.Sprintf("unknown (v%d)", db.Version)
+	}
+	fmt.Printf("Format:    %s\n", format)
 	fmt.Printf("File size: %d bytes\n", fi.Size())
 	fmt.Printf("Hashes:    %d\n", db.Len())
 	return nil

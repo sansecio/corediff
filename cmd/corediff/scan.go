@@ -54,15 +54,13 @@ func (s *scanArg) Execute(_ []string) error {
 	if restarted, err := selfupdate.UpdateRestart(selfUpdateURL); restarted || err != nil {
 		logVerbose("Restarted new version", restarted, "with error:", err)
 	}
-	s.validate()
+	if err := s.validate(); err != nil {
+		return err
+	}
 
 	db, err := hashdb.Open(s.Database)
 	if err != nil {
 		log.Fatal("Error loading database:", err)
-	}
-
-	if db.UsesXXHash64() {
-		normalize.UseXXHash64()
 	}
 
 	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", db.Len(), " precomputed hashes. (C) 2023-2026 Willem de Groot"))
@@ -168,8 +166,14 @@ func addFileHashes(path string, db *hashdb.HashDB, scanBuf []byte) int {
 		return 0
 	}
 	defer fh.Close()
-	n, _ := normalize.HashReader(fh, db, nil, scanBuf)
-	return n
+	var added int
+	normalize.HashReader(fh, func(h uint64, _ []byte) {
+		if !db.Contains(h) {
+			db.Add(h)
+			added++
+		}
+	}, scanBuf)
+	return added
 }
 
 // scanFileWithDB scans path and returns line numbers and content of lines
@@ -193,17 +197,10 @@ func scanFileWithDB(path string, db *hashdb.HashDB, scanBuf []byte) (hits []int,
 	return hits, lines
 }
 
-func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
-	stats := &walkStats{}
-	scanBuf := normalize.NewScanBuf()
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		var relPath string
-		if path == root {
-			relPath = root
-		} else {
-			relPath = path[len(root)+1:]
-		}
-
+// walkFiles walks root, skipping directories and errors, and calls fn for each file
+// with its relative path and absolute path.
+func walkFiles(root string, fn func(relPath, absPath string) error) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Printf("failure accessing a path %q: %v\n", path, err)
 			return nil
@@ -211,6 +208,20 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 		if info.IsDir() {
 			return nil
 		}
+		var relPath string
+		if path == root {
+			relPath = root
+		} else {
+			relPath = path[len(root)+1:]
+		}
+		return fn(relPath, path)
+	})
+}
+
+func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
+	stats := &walkStats{}
+	scanBuf := normalize.NewScanBuf()
+	err := walkFiles(root, func(relPath, path string) error {
 		if args.PathFilter != "" && !strings.HasPrefix(relPath, args.PathFilter) {
 			return nil
 		}
@@ -276,7 +287,7 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 		return nil
 	})
 	if err != nil {
-		log.Fatalln("error walking the path", root, err)
+		log.Fatalln("error walking the path:", root, err)
 	}
 	return stats
 }

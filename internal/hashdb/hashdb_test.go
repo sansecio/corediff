@@ -102,32 +102,28 @@ func TestSaveDeduplication(t *testing.T) {
 func TestCorruptFile(t *testing.T) {
 	dir := t.TempDir()
 
-	// File size not a multiple of 8 (invalid for both formats)
+	// 5 bytes is too small for header (16 bytes)
 	path := filepath.Join(dir, "corrupt.db")
 	require.NoError(t, os.WriteFile(path, []byte("hello"), 0644))
 	_, err := Open(path)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a multiple of 8")
+	assert.Contains(t, err.Error(), "too small")
 }
 
-func TestLegacyFormat(t *testing.T) {
+func TestLegacyFormatRejected(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "legacy.db")
 
-	// Write raw sequential uint64s (no header)
+	// Write raw sequential uint64s (no header) — legacy format
 	f, err := os.Create(path)
 	require.NoError(t, err)
 	hashes := []uint64{42, 100, 1}
 	require.NoError(t, binary.Write(f, binary.LittleEndian, hashes))
 	require.NoError(t, f.Close())
 
-	db, err := Open(path)
-	require.NoError(t, err)
-	assert.Equal(t, 3, db.Len())
-	assert.True(t, db.Contains(42))
-	assert.True(t, db.Contains(100))
-	assert.True(t, db.Contains(1))
-	assert.False(t, db.Contains(99))
+	_, err = Open(path)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no longer supported")
 }
 
 func TestVersionMismatch(t *testing.T) {
@@ -143,7 +139,7 @@ func TestVersionMismatch(t *testing.T) {
 
 	_, err = Open(path)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported database version")
+	assert.Contains(t, err.Error(), "newer than supported")
 }
 
 func TestFileNotFound(t *testing.T) {

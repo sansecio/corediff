@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/gwillem/corediff/internal/chunker"
-	"github.com/gwillem/corediff/internal/hashdb"
 )
 
 func loadFixtureLines(b *testing.B) [][]byte {
@@ -243,8 +242,7 @@ func BenchmarkHashReaderInit(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		empty.Reset(nil)
-		db := hashdb.New()
-		HashReader(empty, db, nil, nil)
+		HashReader(empty, func(uint64, []byte) {}, nil)
 	}
 }
 

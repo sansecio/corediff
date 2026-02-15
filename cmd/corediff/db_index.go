@@ -298,6 +298,36 @@ func (a *dbIndexArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *mani
 	return nil
 }
 
+// concurrentMerger runs work functions concurrently, each with its own HashDB,
+// and merges results back into a shared database under a mutex.
+type concurrentMerger struct {
+	mu  sync.Mutex
+	wg  sync.WaitGroup
+	sem chan struct{}
+	db  *hashdb.HashDB
+}
+
+func newConcurrentMerger(db *hashdb.HashDB) *concurrentMerger {
+	return &concurrentMerger{
+		sem: make(chan struct{}, runtime.GOMAXPROCS(0)),
+		db:  db,
+	}
+}
+
+func (m *concurrentMerger) run(fn func(pkgDB *hashdb.HashDB)) {
+	m.sem <- struct{}{}
+	m.wg.Go(func() {
+		defer func() { <-m.sem }()
+		pkgDB := hashdb.New()
+		fn(pkgDB)
+		m.mu.Lock()
+		m.db.Merge(pkgDB)
+		m.mu.Unlock()
+	})
+}
+
+func (m *concurrentMerger) wait() { m.wg.Wait() }
+
 func (a *dbIndexArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
 	proj, err := composer.ParseProject(a.Composer)
 	if err != nil {
@@ -366,33 +396,16 @@ func (a *dbIndexArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manif
 
 	oldSize := db.Len()
 
-	var (
-		mu  sync.Mutex
-		wg  sync.WaitGroup
-		sem = make(chan struct{}, runtime.GOMAXPROCS(0))
-	)
-
+	cm := newConcurrentMerger(db)
 	for _, pkg := range newPkgs {
-		sem <- struct{}{} // acquire slot
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }() // release slot
-
-			pkgDB := hashdb.New()
+		cm.run(func(pkgDB *hashdb.HashDB) {
 			a.indexComposerPackage(pkg, proj.Repos, httpClient, pkgDB, opts)
-
-			mu.Lock()
-			db.Merge(pkgDB)
-			mu.Unlock()
-
 			if err := mf.MarkIndexed(pkg.Name, pkg.Version); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
 			}
-		}()
+		})
 	}
-
-	wg.Wait()
+	cm.wait()
 
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
@@ -455,19 +468,10 @@ func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifes
 
 	oldSize := db.Len()
 
-	var (
-		mu  sync.Mutex
-		wg  sync.WaitGroup
-		sem = make(chan struct{}, runtime.GOMAXPROCS(0))
-	)
+	cm := newConcurrentMerger(db)
 
 	for _, pkg := range packagistPkgs {
-		sem <- struct{}{} // acquire slot
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }() // release slot
-
+		cm.run(func(pkgDB *hashdb.HashDB) {
 			c := &packagist.Client{HTTP: httpClient}
 			versions, err := c.Versions(pkg)
 			if err != nil {
@@ -498,37 +502,22 @@ func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifes
 				}
 			}
 
-			pkgDB := hashdb.New()
 			replaces := a.indexVersions(pkg, newVersions, pkgDB, pkgOpts)
 			for _, r := range replaces {
 				if err := mf.MarkReplaced(r); err != nil {
 					fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
 				}
 			}
-
-			mu.Lock()
-			db.Merge(pkgDB)
-			mu.Unlock()
-		}()
+		})
 	}
 
 	for _, url := range gitURLs {
-		sem <- struct{}{} // acquire slot
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }() // release slot
-
-			pkgDB := hashdb.New()
+		cm.run(func(pkgDB *hashdb.HashDB) {
 			a.updateGitURLEntry(url, pkgDB, mf, opts)
-
-			mu.Lock()
-			db.Merge(pkgDB)
-			mu.Unlock()
-		}()
+		})
 	}
 
-	wg.Wait()
+	cm.wait()
 
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
@@ -795,22 +784,7 @@ func (a *dbIndexArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string,
 
 func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool, noPlatform bool) {
 	scanBuf := normalize.NewScanBuf()
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		var relPath string
-		if path == root {
-			relPath = root
-		} else {
-			relPath = path[len(root)+1:]
-		}
-
-		if err != nil {
-			fmt.Printf("failure accessing a path %q: %v\n", path, err)
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-
+	err := walkFiles(root, func(relPath, path string) error {
 		if !allValidText && !normalize.HasValidExt(path) {
 			logVerbose(grey(" - ", relPath, " (no code)"))
 			return nil

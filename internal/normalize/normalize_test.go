@@ -29,8 +29,14 @@ func TestHashReader(t *testing.T) {
 	t.Run("adds hashes for code lines", func(t *testing.T) {
 		db := hashdb.New()
 		input := "<?php\necho 'hello';\n// comment\n\necho 'world';\n"
-		n, total := HashReader(strings.NewReader(input), db, nil, nil)
-		assert.Greater(t, n, 0)
+		var added int
+		total := HashReader(strings.NewReader(input), func(h uint64, _ []byte) {
+			if !db.Contains(h) {
+				db.Add(h)
+				added++
+			}
+		}, nil)
+		assert.Greater(t, added, 0)
 		assert.Greater(t, total, 0)
 		assert.Greater(t, db.Len(), 0)
 	})
@@ -38,8 +44,9 @@ func TestHashReader(t *testing.T) {
 	t.Run("skips empty and comment lines", func(t *testing.T) {
 		db := hashdb.New()
 		input := "// comment\n# another comment\n/* block comment\n\n"
-		n, total := HashReader(strings.NewReader(input), db, nil, nil)
-		assert.Equal(t, 0, n)
+		total := HashReader(strings.NewReader(input), func(h uint64, _ []byte) {
+			db.Add(h)
+		}, nil)
 		assert.Equal(t, 0, total)
 		assert.Equal(t, 0, db.Len())
 	})
@@ -47,11 +54,17 @@ func TestHashReader(t *testing.T) {
 	t.Run("does not add duplicate hashes", func(t *testing.T) {
 		db := hashdb.New()
 		input := "echo 'hello';\necho 'hello';\n"
-		n, total := HashReader(strings.NewReader(input), db, nil, nil)
+		var added int
+		total := HashReader(strings.NewReader(input), func(h uint64, _ []byte) {
+			if !db.Contains(h) {
+				db.Add(h)
+				added++
+			}
+		}, nil)
 		// First line adds hash(es), second is duplicate
 
-		assert.Greater(t, n, 0)
-		assert.Greater(t, total, n) // total includes duplicates
+		assert.Greater(t, added, 0)
+		assert.Greater(t, total, added) // total includes duplicates
 		// All hashes from first line should already exist for second
 		count := 0
 		HashLine([]byte("echo 'hello';"), func(uint64, []byte) bool { count++; return true })
@@ -61,11 +74,17 @@ func TestHashReader(t *testing.T) {
 	t.Run("returns count of new hashes", func(t *testing.T) {
 		db := hashdb.New()
 		input := "line1line1;\nline2line2;\n"
-		n, _ := HashReader(strings.NewReader(input), db, nil, nil)
+		var added int
+		HashReader(strings.NewReader(input), func(h uint64, _ []byte) {
+			if !db.Contains(h) {
+				db.Add(h)
+				added++
+			}
+		}, nil)
 		expected := 0
 		HashLine([]byte("line1line1;"), func(uint64, []byte) bool { expected++; return true })
 		HashLine([]byte("line2line2;"), func(uint64, []byte) bool { expected++; return true })
-		assert.Equal(t, expected, n)
+		assert.Equal(t, expected, added)
 	})
 }
 

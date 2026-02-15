@@ -12,9 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	xxhash "github.com/cespare/xxhash/v2"
 	"github.com/gwillem/corediff/internal/chunker"
-	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/zeebo/xxh3"
 )
 
@@ -40,6 +38,9 @@ var (
 	ScanExts = []string{"php", "phtml", "js", "htaccess", "sh"}
 )
 
+// Hash computes the XXH3 hash of b.
+var Hash = xxh3.Hash
+
 // Line normalizes a line of code by trimming whitespace,
 // stripping comments, and applying regex filters.
 func Line(b []byte) []byte {
@@ -59,19 +60,6 @@ func Line(b []byte) []byte {
 	}
 	return b
 }
-
-// Hash computes the hash of b using the active algorithm.
-// Defaults to XXH3 (for new databases). Call UseXXHash64() to switch
-// to xxhash64 for compatibility with legacy databases.
-var Hash = xxh3.Hash
-
-// UseXXHash64 switches the hash function to xxhash64 (cespare/xxhash/v2),
-// used by legacy and CDDB v1 databases.
-func UseXXHash64() { Hash = xxhash.Sum64 }
-
-// UseXXH3 switches the hash function to XXH3 (zeebo/xxh3),
-// used by CDDB v2+ databases. This is the default.
-func UseXXH3() { Hash = xxh3.Hash }
 
 // HashLine normalizes a line, then hashes it (chunking if minified).
 // Calls fn for each hash produced with the chunk that produced it.
@@ -117,33 +105,27 @@ func NewScanBuf() []byte {
 	return make([]byte, MaxTokenSize)
 }
 
-// HashReader scans lines from r, normalizes and hashes each line,
-// and adds new hashes to db. Returns (new hashes added, total hashes processed).
-// If logf is non-nil, each hash is logged as "HASH line".
+// HashReader scans lines from r, normalizes and hashes each line.
+// For each hash produced, emit is called with the hash and the raw scanner line.
+// Returns the total number of hashes processed.
 // If buf is non-nil, it is used as the scanner buffer (see NewScanBuf).
-func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any), buf []byte) (int, int) {
+func HashReader(r io.Reader, emit func(h uint64, rawLine []byte), buf []byte) int {
 	scanner := bufio.NewScanner(r)
 	if buf == nil {
 		buf = make([]byte, MaxTokenSize)
 	}
 	scanner.Buffer(buf, MaxTokenSize)
 
-	var added, total int
+	var total int
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		HashLine(line, func(h uint64, _ []byte) bool {
 			total++
-			if !db.Contains(h) {
-				db.Add(h)
-				added++
-			}
-			if logf != nil {
-				logf("      %016x %s", h, line)
-			}
+			emit(h, line)
 			return true
 		})
 	}
-	return added, total
+	return total
 }
 
 // IsValidUtf8 checks if the first 8KB of a file is valid UTF-8.

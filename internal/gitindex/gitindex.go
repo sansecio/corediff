@@ -39,14 +39,14 @@ type IndexResult struct {
 type IndexOptions struct {
 	NoPlatform      bool
 	AllValidText    bool
-	PathPrefix      string            // prepended to file paths for path hashes (e.g. "vendor/psr/log/")
-	RepoName        string            // display name for log lines; used when PathPrefix yields no package name
-	Verbose         int               // verbosity level: 1=-v (versions), 3=-vvv (files), 4=-vvvv (lines)
-	HTTP            *http.Client      // optional; defaults to http.DefaultClient
-	CacheDir        string            // if set, cache zip downloads here
-	OnVersionDone   func(version string)                // called after each version is indexed
-	OnSubPackage    func(name, version string)          // called for each sub-package found in a version
-	CollectLockDeps bool                                // collect composer.lock deps across all versions
+	PathPrefix      string                     // prepended to file paths for path hashes (e.g. "vendor/psr/log/")
+	RepoName        string                     // display name for log lines; used when PathPrefix yields no package name
+	Verbose         int                        // verbosity level: 1=-v (versions), 3=-vvv (files), 4=-vvvv (lines)
+	HTTP            *http.Client               // optional; defaults to http.DefaultClient
+	CacheDir        string                     // if set, cache zip downloads here
+	OnVersionDone   func(version string)       // called after each version is indexed
+	OnSubPackage    func(name, version string) // called for each sub-package found in a version
+	CollectLockDeps bool                       // collect composer.lock deps across all versions
 }
 
 // CloneAndIndex bare-clones repoURL, then for each version→ref pair,
@@ -416,13 +416,16 @@ func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts I
 	}
 	defer reader.Close()
 
-	var lineLogf func(string, ...any)
-	if opts.Verbose >= 4 {
-		lineLogf = func(format string, args ...any) {
-			fmt.Println(fmt.Sprintf(format, args...))
+	var added int
+	total := normalize.HashReader(reader, func(h uint64, rawLine []byte) {
+		if !db.Contains(h) {
+			db.Add(h)
+			added++
 		}
-	}
-	added, total := normalize.HashReader(reader, db, lineLogf, scanBuf)
+		if opts.Verbose >= 4 {
+			fmt.Printf("      %016x %s\n", h, rawLine)
+		}
+	}, scanBuf)
 
 	// Mark blob as processed so subsequent versions skip it
 	if seenBlobs != nil {

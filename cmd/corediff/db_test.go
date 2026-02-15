@@ -21,7 +21,6 @@ import (
 func TestDBAdd(t *testing.T) {
 	db := hashdb.New()
 	addPath("../../fixture/docroot", db, false, false, false)
-	
 
 	// Should have line hashes
 	assert.Greater(t, db.Len(), 0)
@@ -35,11 +34,9 @@ func TestDBAdd(t *testing.T) {
 func TestDBAddNoPlatform(t *testing.T) {
 	dbWith := hashdb.New()
 	addPath("../../fixture/docroot", dbWith, false, false, false)
-	
 
 	dbWithout := hashdb.New()
 	addPath("../../fixture/docroot", dbWithout, false, false, true)
-	
 
 	// noPlatform=true should have fewer hashes (no path hashes)
 	assert.Greater(t, dbWith.Len(), dbWithout.Len())
