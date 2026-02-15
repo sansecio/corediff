@@ -20,7 +20,7 @@ import (
 	cdpath "github.com/gwillem/corediff/internal/path"
 )
 
-type dbAddArg struct {
+type dbIndexArg struct {
 	Packagist    string `short:"p" long:"packagist" description:"Index Packagist package (vendor/package)"`
 	Composer     string `long:"composer" description:"Index all packages from composer.json + lock"`
 	Update       bool   `short:"u" long:"update" description:"Re-check all previously indexed packages for new versions"`
@@ -32,7 +32,7 @@ type dbAddArg struct {
 	} `positional-args:"yes"`
 }
 
-func (a *dbAddArg) Execute(_ []string) error {
+func (a *dbIndexArg) Execute(_ []string) error {
 	// Mutual exclusion: only one of --packagist, --composer, --update, or <path>
 	modes := 0
 	if a.Packagist != "" {
@@ -101,7 +101,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // buildHTTPClient constructs an HTTP client with the auth + logging transport chain.
 // It also populates opts.Logf / opts.LineLogf based on verbosity.
-func (a *dbAddArg) buildHTTPClient(opts *gitindex.IndexOptions) (*http.Client, error) {
+func (a *dbIndexArg) buildHTTPClient(opts *gitindex.IndexOptions) (*http.Client, error) {
 	var transport http.RoundTripper = http.DefaultTransport
 
 	opts.Verbose = len(globalOpts.Verbose)
@@ -137,7 +137,7 @@ func (a *dbAddArg) buildHTTPClient(opts *gitindex.IndexOptions) (*http.Client, e
 // indexVersions tries git clone for all versions, falling back to zip per version.
 // OnVersionDone (if set in opts) is called after each successfully indexed version.
 // Returns the list of packages declared in composer.json "replace" sections (if any).
-func (a *dbAddArg) indexVersions(pkg string, versions []packagist.Version, db *hashdb.HashDB, opts gitindex.IndexOptions) []string {
+func (a *dbIndexArg) indexVersions(pkg string, versions []packagist.Version, db *hashdb.HashDB, opts gitindex.IndexOptions) []string {
 	if len(versions) == 0 {
 		return nil
 	}
@@ -189,7 +189,7 @@ func (a *dbAddArg) indexVersions(pkg string, versions []packagist.Version, db *h
 }
 
 // indexPackage fetches versions for pkg from repoURL and indexes them into db.
-func (a *dbAddArg) indexPackage(pkg, repoURL string, httpClient *http.Client, db *hashdb.HashDB, opts gitindex.IndexOptions) error {
+func (a *dbIndexArg) indexPackage(pkg, repoURL string, httpClient *http.Client, db *hashdb.HashDB, opts gitindex.IndexOptions) error {
 	c := &packagist.Client{BaseURL: repoURL, HTTP: httpClient}
 
 	versions, err := c.Versions(pkg)
@@ -204,7 +204,7 @@ func (a *dbAddArg) indexPackage(pkg, repoURL string, httpClient *http.Client, db
 	return nil
 }
 
-func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
+func (a *dbIndexArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
 	// Parse optional version pin: "vendor/pkg:1.2.3" or "vendor/pkg@1.2.3"
 	pkg := a.Packagist
 	var pinVersion string
@@ -298,7 +298,7 @@ func (a *dbAddArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *manife
 	return nil
 }
 
-func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
+func (a *dbIndexArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
 	proj, err := composer.ParseProject(a.Composer)
 	if err != nil {
 		return err
@@ -403,7 +403,7 @@ func (a *dbAddArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manifes
 	return nil
 }
 
-func (a *dbAddArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
+func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
 	pkgs := mf.TrackedPackages()
 	if len(pkgs) == 0 {
 		return fmt.Errorf("no tracked packages — nothing to update. Add packages with --packagist or a git URL first")
@@ -541,7 +541,7 @@ func (a *dbAddArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifest.
 
 // updateGitURLEntry fetches new tags from a git URL and indexes any versions
 // not yet in the manifest. Used by executeUpdate for git URL manifest entries.
-func (a *dbAddArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest.Manifest, opts gitindex.IndexOptions) {
+func (a *dbIndexArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest.Manifest, opts gitindex.IndexOptions) {
 	var cloneDir string
 	if dbCommand.CacheDir != "" {
 		cloneDir = filepath.Join(dbCommand.CacheDir, "git", sanitizePath(url))
@@ -688,7 +688,7 @@ func readComposerPathPrefix(repo *git.Repository) string {
 }
 
 // indexComposerPackage indexes a single lock file package using source/dist/repo fallback.
-func (a *dbAddArg) indexComposerPackage(pkg composer.LockPackage, repos []composer.Repository, httpClient *http.Client, db *hashdb.HashDB, opts gitindex.IndexOptions) {
+func (a *dbIndexArg) indexComposerPackage(pkg composer.LockPackage, repos []composer.Repository, httpClient *http.Client, db *hashdb.HashDB, opts gitindex.IndexOptions) {
 	fmt.Printf("Indexing %s (%s)\n", pkg.Name, pkg.Version)
 	opts.PathPrefix = "vendor/" + pkg.Name + "/"
 
@@ -721,7 +721,7 @@ func lockToVersion(pkg composer.LockPackage) packagist.Version {
 	return v
 }
 
-func (a *dbAddArg) executeLocalPaths(db *hashdb.HashDB, dbPath string) error {
+func (a *dbIndexArg) executeLocalPaths(db *hashdb.HashDB, dbPath string) error {
 	for _, p := range a.Path.Path {
 		fi, fiErr := os.Stat(p)
 		if fiErr != nil {
@@ -765,7 +765,7 @@ func isGitURL(s string) bool {
 	return strings.Contains(s, "://") || strings.HasPrefix(s, "git@")
 }
 
-func (a *dbAddArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
+func (a *dbIndexArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
 	opts := gitindex.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,

@@ -11,13 +11,13 @@ corediff scan -d custom.db /var/www/magento          # scan with specific DB
 corediff scan -vv suspicious-file.php              # debug: show hash for each line
 
 # Indexing — building the hash database
-corediff db add --composer /var/www/magento           # index full install (all deps from lock file)
-corediff db add --packagist magento/module-catalog    # index a single Packagist package (all versions)
-corediff db add -d custom.db /path/to/extension       # add a local extension to DB
+corediff db index --composer /var/www/magento           # index full install (all deps from lock file)
+corediff db index --packagist magento/module-catalog    # index a single Packagist package (all versions)
+corediff db index -d custom.db /path/to/extension       # add a local extension to DB
 
 # Future
-corediff db add --update                              # re-run weekly, picks up new package versions only
-corediff db add --packagist magento/product-enterprise-edition  # private repo auth via ~/.composer/auth.json
+corediff db index --update                              # re-run weekly, picks up new package versions only
+corediff db index --packagist magento/product-enterprise-edition  # private repo auth via ~/.composer/auth.json
 
 # Database maintenance
 corediff db merge -d all.db community.db enterprise.db  # combine databases
@@ -38,9 +38,9 @@ Single binary with two top-level subcommands. `scan` is the default
 - [ ] Exit codes: 0=clean, 1=unrecognized lines, 2=suspect lines, >2=error
 
 **`corediff db`** — Database maintenance
-- [x] `corediff db add <path>` — Add hashes from local files/dirs to DB
-- [x] `corediff db add --packagist <vendor/package>` — Index a Packagist package (all versions) into the DB
-- [x] `corediff db add --composer <path>` — Index all packages from composer.json + lock
+- [x] `corediff db index <path>` — Add hashes from local files/dirs to DB
+- [x] `corediff db index --packagist <vendor/package>` — Index a Packagist package (all versions) into the DB
+- [x] `corediff db index --composer <path>` — Index all packages from composer.json + lock
 - [x] `corediff db merge <db1> <db2>` — Merge multiple databases
 - [x] `corediff db info [db-path]` — Print DB stats (hash count, format version, file size)
 - [ ] Default DB: `$XDG_DATA_HOME/corediff/default.db`. Override with `-d <path>`.
@@ -54,7 +54,7 @@ Single binary with two top-level subcommands. `scan` is the default
 
 ## Indexing
 
-Pipeline: `corediff db add --packagist <package>`, `corediff db add --composer <path>`
+Pipeline: `corediff db index --packagist <package>`, `corediff db index --composer <path>`
 
 - [x] Fetch version list from Packagist API (`/p2/{vendor}/{package}.json`)
 - [x] Default repo: Packagist. Custom repos discovered from composer.json `repositories` section.

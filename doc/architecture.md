@@ -83,7 +83,7 @@ corediff scan <docroot>
 Builds the hash database from known-good source code. Four mutually exclusive modes:
 
 ```
-corediff db add -d <db>
+corediff db index -d <db>
     │
     ├── --packagist vendor/pkg ─────────────────────────────────┐
     │                                                           │
@@ -156,7 +156,7 @@ Sub-packages embedded in a monorepo do NOT get individual `package@version` entr
 
 ## Git URL Indexing: Dependency Following
 
-When indexing a git URL (e.g., `corediff db add <git-url>`), after indexing the main repo:
+When indexing a git URL (e.g., `corediff db index <git-url>`), after indexing the main repo:
 
 ```
 1. Index all version tags → hash DB + replaces + sub-packages

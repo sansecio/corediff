@@ -108,7 +108,7 @@ func TestDBAdd_PackagistValidation(t *testing.T) {
 	dbCommand.Database = dbPath
 
 	t.Run("packagist+path", func(t *testing.T) {
-		arg := dbAddArg{Packagist: "vendor/pkg"}
+		arg := dbIndexArg{Packagist: "vendor/pkg"}
 		arg.Path.Path = []string{"/some/path"}
 		err := arg.Execute(nil)
 		require.Error(t, err)
@@ -116,14 +116,14 @@ func TestDBAdd_PackagistValidation(t *testing.T) {
 	})
 
 	t.Run("composer+packagist", func(t *testing.T) {
-		arg := dbAddArg{Packagist: "vendor/pkg", Composer: "/some/composer.json"}
+		arg := dbIndexArg{Packagist: "vendor/pkg", Composer: "/some/composer.json"}
 		err := arg.Execute(nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cannot combine")
 	})
 
 	t.Run("composer+path", func(t *testing.T) {
-		arg := dbAddArg{Composer: "/some/composer.json"}
+		arg := dbIndexArg{Composer: "/some/composer.json"}
 		arg.Path.Path = []string{"/some/path"}
 		err := arg.Execute(nil)
 		require.Error(t, err)
@@ -131,14 +131,14 @@ func TestDBAdd_PackagistValidation(t *testing.T) {
 	})
 
 	t.Run("neither provided", func(t *testing.T) {
-		arg := dbAddArg{}
+		arg := dbIndexArg{}
 		err := arg.Execute(nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "provide --packagist, --composer, --update, or at least one <path>")
 	})
 
 	t.Run("composer missing file", func(t *testing.T) {
-		arg := dbAddArg{Composer: filepath.Join(tmp, "nonexistent.json")}
+		arg := dbIndexArg{Composer: filepath.Join(tmp, "nonexistent.json")}
 		err := arg.Execute(nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "composer.json")
@@ -160,7 +160,7 @@ func TestBuildHTTPClient_AppliesAuth(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	t.Cleanup(func() { os.Chdir(origDir) })
 
-	arg := dbAddArg{}
+	arg := dbIndexArg{}
 	opts := gitindex.IndexOptions{}
 	client, err := arg.buildHTTPClient(&opts)
 	require.NoError(t, err)
@@ -204,7 +204,7 @@ func TestDBAdd_DatabaseOnParent(t *testing.T) {
 	dbPath := filepath.Join(tmp, "test.db")
 	dbCommand.Database = dbPath
 
-	arg := dbAddArg{NoPlatform: true}
+	arg := dbIndexArg{NoPlatform: true}
 	arg.Path.Path = []string{"../../fixture/docroot"}
 	require.NoError(t, arg.Execute(nil))
 
@@ -280,7 +280,7 @@ func TestUpdateGitURLEntry(t *testing.T) {
 	db := hashdb.New()
 	opts := gitindex.IndexOptions{NoPlatform: true}
 
-	arg := &dbAddArg{NoPlatform: true}
+	arg := &dbIndexArg{NoPlatform: true}
 	arg.updateGitURLEntry(dir, db, mf, opts)
 
 	// Should have indexed v2.0.0 but not re-indexed v1.0.0
@@ -341,7 +341,7 @@ func TestUpdateGitURLEntry_WritesSubPackagesToManifest(t *testing.T) {
 	db := hashdb.New()
 	opts := gitindex.IndexOptions{}
 
-	arg := &dbAddArg{}
+	arg := &dbIndexArg{}
 	arg.updateGitURLEntry(dir, db, mf, opts)
 
 	// Verify monorepo version was indexed

@@ -10,7 +10,7 @@ corediff/
 │   ├── scan_test.go
 │   ├── output.go          # Color helpers, verbose logging
 │   ├── db.go              # corediff db: parent for db subcommands
-│   ├── db_add.go          # corediff db add: local paths, --packagist, --composer, --update
+│   ├── db_index.go          # corediff db add: local paths, --packagist, --composer, --update
 │   ├── db_merge.go        # corediff db merge: combine databases
 │   ├── db_info.go         # corediff db info: print DB stats
 │   └── db_test.go
@@ -29,27 +29,6 @@ corediff/
 └── go.mod / go.sum
 ```
 
----
-
-## Step 7b — Dependency resolution
-
-**Goal:** `corediff db add --packagist magento/product-enterprise-edition` automatically resolves
-and indexes all transitive dependencies.
-
-- Download one version of the root package, parse its `composer.json` `require` section, recurse.
-- `--no-deps` flag to index a single package only.
-- Depth limit: max 3 levels deep by default (`--depth N` to override).
-- When `composer.lock` is available (via `--composer`), use its exact package list instead of recursing.
-
----
-
-## Concurrency analysis (done)
-
-Documented in `doc/concurrency.md`. Key findings:
-
-- `--composer` and `--update` use a GOMAXPROCS-bounded worker pool (different packages indexed in parallel).
-- `executeGitURL` (single repo) processes tags sequentially — this is intentional. The `seenBlobs` dedup skips ~95% of files in older versions. Parallelizing across tags would multiply total work and likely slow things down.
-- Scanning is sequential. Parallel file scanning is a future option (step 8).
 
 ---
 

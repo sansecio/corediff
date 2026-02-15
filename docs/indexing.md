@@ -67,10 +67,10 @@ In `--composer` mode, packages that appear in the manifest's replace set are aut
 
 ```bash
 # 1. Index the monorepo (covers all magento/* packages)
-corediff db add --packagist magento/magento2
+corediff db index --packagist magento/magento2
 
 # 2. Index remaining third-party packages from your project
-corediff db add --composer /path/to/composer.json
+corediff db index --composer /path/to/composer.json
 ```
 
 Step 2 will skip all `magento/*` packages already covered by the monorepo.

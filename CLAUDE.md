@@ -19,7 +19,7 @@ Forensic tool to detect unauthorized code modifications in open-source codebases
 ## Architecture
 
 - Single `main` package in `cmd/`
-- CLI: `go-flags` with subcommands (scan, add, merge, trace)
+- CLI: `go-flags` with subcommands (scan, db index, db merge, db info)
 - Hash format: binary little-endian uint64 (xxhash64), type `hashDB = map[uint64]struct{}`
 - Normalization: strips whitespace, comments, applies regex filters before hashing
 - Self-update via `go-selfupdate`
@@ -31,7 +31,7 @@ The hash DB stores both line hashes and path hashes. In default scan mode, only 
 - `--ignore-paths` — Skip path checking entirely. Scan all files regardless of whether their path is in the DB. Useful for scanning non-standard installs or third-party code.
 - `--no-platform` — Skip platform root detection (normally corediff requires the target to look like a Magento/WordPress root). When adding hashes, don't store file paths in the DB — only store line hashes.
 
-When adding hashes with `add`, paths from `excludePaths` (e.g. `generated/**`, `var/**`) are never stored in the DB, but their line contents are still hashed.
+When adding hashes with `index`, paths from `excludePaths` (e.g. `generated/**`, `var/**`) are never stored in the DB, but their line contents are still hashed.
 
 ## Key dependencies
 
