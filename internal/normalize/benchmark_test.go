@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gwillem/corediff/internal/chunker"
+	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/zeebo/xxh3"
 )
 
@@ -235,4 +236,29 @@ func BenchmarkRegexWithShortSkip(b *testing.B) {
 		}
 	}
 	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(len(trimmed)), "ns/line")
+}
+
+// Benchmark HashReader initialization cost (10MB buffer allocation)
+func BenchmarkHashReaderInit(b *testing.B) {
+	empty := bytes.NewReader(nil)
+	b.ReportAllocs()
+	for b.Loop() {
+		empty.Reset(nil)
+		db := hashdb.New()
+		HashReader(empty, db, nil, nil)
+	}
+}
+
+// Benchmark HashReader with a reused buffer (no per-call allocation)
+func BenchmarkHashReaderInitReuse(b *testing.B) {
+	empty := bytes.NewReader(nil)
+	buf := make([]byte, MaxTokenSize)
+	b.ReportAllocs()
+	for b.Loop() {
+		empty.Reset(nil)
+		scanner := bufio.NewScanner(empty)
+		scanner.Buffer(buf, MaxTokenSize)
+		for scanner.Scan() {
+		}
+	}
 }

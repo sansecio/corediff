@@ -48,10 +48,7 @@ var (
 	corediffVersion = buildversion.String()
 )
 
-const (
-	defaultHashDBURL = "https://sansec.io/downloads/corediff-db/corediff.bin"
-	maxTokenSize     = 1024 * 1024 * 10 // 10 MB
-)
+const defaultHashDBURL = "https://sansec.io/downloads/corediff-db/corediff.bin"
 
 func (s *scanArg) Execute(_ []string) error {
 	if restarted, err := selfupdate.UpdateRestart(selfUpdateURL); restarted || err != nil {
@@ -138,7 +135,7 @@ func (s *scanArg) validate() error {
 	return nil
 }
 
-func parseFile(path string, lineCB func([]byte)) error {
+func parseFile(path string, lineCB func([]byte), scanBuf []byte) error {
 	fh, err := os.Open(path)
 	if err != nil && os.IsNotExist(err) {
 		return fmt.Errorf("file does not exist: %s", path)
@@ -146,13 +143,12 @@ func parseFile(path string, lineCB func([]byte)) error {
 		return fmt.Errorf("open error on %s: %s", path, err)
 	}
 	defer fh.Close()
-	return parseFH(fh, lineCB)
+	return parseFH(fh, lineCB, scanBuf)
 }
 
-func parseFH(r io.Reader, lineCB func([]byte)) error {
+func parseFH(r io.Reader, lineCB func([]byte), scanBuf []byte) error {
 	scanner := bufio.NewScanner(r)
-	buf := make([]byte, maxTokenSize)
-	scanner.Buffer(buf, maxTokenSize)
+	scanner.Buffer(scanBuf, normalize.MaxTokenSize)
 	for i := 0; scanner.Scan(); i++ {
 		lineCB(scanner.Bytes())
 	}
@@ -161,20 +157,20 @@ func parseFH(r io.Reader, lineCB func([]byte)) error {
 
 // addFileHashes opens path and adds all line hashes to db using HashReader.
 // Returns the number of new hashes added.
-func addFileHashes(path string, db *hashdb.HashDB) int {
+func addFileHashes(path string, db *hashdb.HashDB, scanBuf []byte) int {
 	fh, err := os.Open(path)
 	if err != nil {
 		log.Println("err: ", err)
 		return 0
 	}
 	defer fh.Close()
-	n, _ := normalize.HashReader(fh, db, nil)
+	n, _ := normalize.HashReader(fh, db, nil, scanBuf)
 	return n
 }
 
 // scanFileWithDB scans path and returns line numbers and content of lines
 // whose hashes are not in db.
-func scanFileWithDB(path string, db *hashdb.HashDB) (hits []int, lines [][]byte) {
+func scanFileWithDB(path string, db *hashdb.HashDB, scanBuf []byte) (hits []int, lines [][]byte) {
 	c := 0
 	err := parseFile(path, func(line []byte) {
 		c++
@@ -186,7 +182,7 @@ func scanFileWithDB(path string, db *hashdb.HashDB) (hits []int, lines [][]byte)
 			}
 			return true
 		})
-	})
+	}, scanBuf)
 	if err != nil {
 		log.Println("err: ", err)
 	}
@@ -195,6 +191,7 @@ func scanFileWithDB(path string, db *hashdb.HashDB) (hits []int, lines [][]byte)
 
 func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 	stats := &walkStats{}
+	scanBuf := normalize.NewScanBuf()
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		var relPath string
 		if path == root {
@@ -233,7 +230,7 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 			}
 		}
 
-		hits, lines := scanFileWithDB(path, db)
+		hits, lines := scanFileWithDB(path, db, scanBuf)
 
 		if args.SuspectOnly {
 			hitsFiltered := []int{}

@@ -32,6 +32,8 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 
 	prefix := commonRootPrefix(zr.File)
 
+	scanBuf := normalize.NewScanBuf()
+
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -86,7 +88,7 @@ func IndexZip(zipURL string, db *hashdb.HashDB, opts IndexOptions) error {
 				fmt.Println(fmt.Sprintf(format, args...))
 			}
 		}
-		normalize.HashReader(rc, db, lineLogf)
+		normalize.HashReader(rc, db, lineLogf, scanBuf)
 		rc.Close()
 	}
 

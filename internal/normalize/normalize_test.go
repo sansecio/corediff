@@ -30,7 +30,7 @@ func TestHashReader(t *testing.T) {
 	t.Run("adds hashes for code lines", func(t *testing.T) {
 		db := hashdb.New()
 		input := "<?php\necho 'hello';\n// comment\n\necho 'world';\n"
-		n, total := HashReader(strings.NewReader(input), db, nil)
+		n, total := HashReader(strings.NewReader(input), db, nil, nil)
 		assert.Greater(t, n, 0)
 		assert.Greater(t, total, 0)
 		assert.Greater(t, db.Len(), 0)
@@ -39,7 +39,7 @@ func TestHashReader(t *testing.T) {
 	t.Run("skips empty and comment lines", func(t *testing.T) {
 		db := hashdb.New()
 		input := "// comment\n# another comment\n/* block comment\n\n"
-		n, total := HashReader(strings.NewReader(input), db, nil)
+		n, total := HashReader(strings.NewReader(input), db, nil, nil)
 		assert.Equal(t, 0, n)
 		assert.Equal(t, 0, total)
 		assert.Equal(t, 0, db.Len())
@@ -48,7 +48,7 @@ func TestHashReader(t *testing.T) {
 	t.Run("does not add duplicate hashes", func(t *testing.T) {
 		db := hashdb.New()
 		input := "echo 'hello';\necho 'hello';\n"
-		n, total := HashReader(strings.NewReader(input), db, nil)
+		n, total := HashReader(strings.NewReader(input), db, nil, nil)
 		// First line adds hash(es), second is duplicate
 
 		assert.Greater(t, n, 0)
@@ -62,7 +62,7 @@ func TestHashReader(t *testing.T) {
 	t.Run("returns count of new hashes", func(t *testing.T) {
 		db := hashdb.New()
 		input := "line1line1;\nline2line2;\n"
-		n, _ := HashReader(strings.NewReader(input), db, nil)
+		n, _ := HashReader(strings.NewReader(input), db, nil, nil)
 		expected := 0
 		HashLine([]byte("line1line1;"), func(uint64) bool { expected++; return true })
 		HashLine([]byte("line2line2;"), func(uint64) bool { expected++; return true })

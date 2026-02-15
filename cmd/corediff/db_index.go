@@ -793,6 +793,7 @@ func (a *dbIndexArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string,
 }
 
 func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool, noPlatform bool) {
+	scanBuf := normalize.NewScanBuf()
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		var relPath string
 		if path == root {
@@ -821,7 +822,7 @@ func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool
 			db.Add(normalize.PathHash(relPath))
 		}
 
-		if n := addFileHashes(path, db); n > 0 {
+		if n := addFileHashes(path, db, scanBuf); n > 0 {
 			logVerbose(green(" U " + relPath))
 		} else {
 			logVerbose(grey(" - " + relPath))

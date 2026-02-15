@@ -85,6 +85,7 @@ Replaced `cespare/xxhash/v2` with `zeebo/xxh3`. 1.45x faster raw hashing (~6.3 n
 | Skip short lines (minSize=10) | minor (redundant with guard)     | implemented |
 | Callback API (no slice alloc) | ~7 ns/line + 0 allocs            | implemented |
 | Switch to XXH3                | ~3 ns/line                       | implemented |
+| Reuse scanner buffer          | ~180 µs/file (10 MB alloc)       | implemented |
 
 ### Why the original ~21 ns prediction was wrong
 
@@ -93,3 +94,14 @@ The original estimate simply subtracted the regex cost (~65 ns) from the baselin
 - **Contains guard cost**: `bytes.Contains` scanning each line costs ~2-3 ns/line (cheap but not free)
 - **Pipeline overhead**: TrimSpace, comment prefix checks, and the callback dispatch add up
 - The actual floor with all optimizations is **~25 ns/line** — a **3.4x improvement** from the original ~86 ns
+
+### 5. Reuse scanner buffer across files
+
+`HashReader` (and `parseFH` in scan.go) allocated a 10 MB `bufio.Scanner` buffer per call. For sequential file processing (filepath.Walk), this is pure waste — the same buffer can be reused across files.
+
+| Benchmark              | Per call  | B/op       | Allocs/op |
+| ---------------------- | --------- | ---------- | --------- |
+| Fresh 10 MB alloc      | ~180 µs   | 10,485,770 | 1         |
+| Reused buffer          | ~17 ns    | 0          | 0         |
+
+`HashReader` now accepts an optional `buf []byte` parameter. All walk loops allocate once via `normalize.NewScanBuf()` and pass it through. For a scan of 1000 files, this saves ~180 ms and ~10 GB of GC pressure.

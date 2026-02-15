@@ -59,6 +59,10 @@ func Line(b []byte) []byte {
 	return b
 }
 
+func hash(b []byte) uint64 {
+	return xxh3.Hash(b)
+}
+
 // HashLine normalizes a line, then hashes it (chunking if minified).
 // Calls fn for each hash produced. fn returns true to continue, false to stop.
 // Empty/comment lines produce no calls to fn.
@@ -93,15 +97,24 @@ func HasValidExt(path string) bool {
 	return slices.Contains(ScanExts, strings.TrimLeft(filepath.Ext(path), "."))
 }
 
-const maxTokenSize = 1024 * 1024 * 10 // 10 MB
+const MaxTokenSize = 1024 * 1024 * 10 // 10 MB
+
+// NewScanBuf allocates a reusable scanner buffer. Pass it to HashReader
+// to avoid a 10 MB allocation per call. Safe to reuse across sequential calls.
+func NewScanBuf() []byte {
+	return make([]byte, MaxTokenSize)
+}
 
 // HashReader scans lines from r, normalizes and hashes each line,
 // and adds new hashes to db. Returns (new hashes added, total hashes processed).
 // If logf is non-nil, each hash is logged as "HASH line".
-func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any)) (int, int) {
+// If buf is non-nil, it is used as the scanner buffer (see NewScanBuf).
+func HashReader(r io.Reader, db *hashdb.HashDB, logf func(string, ...any), buf []byte) (int, int) {
 	scanner := bufio.NewScanner(r)
-	buf := make([]byte, maxTokenSize)
-	scanner.Buffer(buf, maxTokenSize)
+	if buf == nil {
+		buf = make([]byte, MaxTokenSize)
+	}
+	scanner.Buffer(buf, MaxTokenSize)
 
 	var added, total int
 	for scanner.Scan() {

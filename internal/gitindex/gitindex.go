@@ -295,10 +295,11 @@ func indexRef(repo *git.Repository, version, ref string, db *hashdb.HashDB, opts
 
 	var newHashes, totalHashes, skippedFiles int
 	start := time.Now()
+	scanBuf := normalize.NewScanBuf()
 
 	err = tree.Files().ForEach(func(f *object.File) error {
 		storedPath := resolveStoredPath(f.Name, subPkgs, opts.PathPrefix)
-		n, t := indexFileCount(f, storedPath, db, opts, seenBlobs)
+		n, t := indexFileCount(f, storedPath, db, opts, seenBlobs, scanBuf)
 		if n == 0 && t == 0 {
 			skippedFiles++
 		}
@@ -363,7 +364,7 @@ func (opts IndexOptions) InstallHTTPTransport() {
 // indexFileCount indexes a single file and returns (new hashes added, total hashes processed).
 // storedPath is the canonical path used for path hashing (e.g. "vendor/magento/module-catalog/Block/Product.php").
 // seenBlobs tracks git blob hashes already processed; unchanged files across versions are skipped.
-func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}) (int, int) {
+func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts IndexOptions, seenBlobs map[plumbing.Hash]struct{}, scanBuf []byte) (int, int) {
 	if !opts.AllValidText && !normalize.HasValidExt(f.Name) {
 		opts.log(3, "skip %s (no valid ext)", f.Name)
 		return 0, 0
@@ -417,7 +418,7 @@ func indexFileCount(f *object.File, storedPath string, db *hashdb.HashDB, opts I
 			fmt.Println(fmt.Sprintf(format, args...))
 		}
 	}
-	added, total := normalize.HashReader(reader, db, lineLogf)
+	added, total := normalize.HashReader(reader, db, lineLogf, scanBuf)
 
 	// Mark blob as processed so subsequent versions skip it
 	if seenBlobs != nil {
