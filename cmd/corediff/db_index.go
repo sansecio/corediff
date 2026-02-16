@@ -782,15 +782,7 @@ func (a *dbIndexArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string,
 
 func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool, noPlatform bool) {
 	scanBuf := normalize.NewScanBuf()
-	err := walkFiles(root, func(relPath, path string) error {
-		if !allValidText && !normalize.HasValidExt(path) {
-			logVerbose(grey(" - ", relPath, " (no code)"))
-			return nil
-		} else if !normalize.IsValidUtf8(path) {
-			logVerbose(grey(" - ", relPath, " (invalid utf8)"))
-			return nil
-		}
-
+	_, err := walkFiles(root, allValidText, func(relPath, path string) error {
 		if !ignorePaths && !noPlatform && path != root && !cdpath.IsExcluded(relPath) {
 			db.Add(normalize.PathHash(relPath))
 		}

@@ -197,10 +197,13 @@ func scanFileWithDB(path string, db *hashdb.HashDB, scanBuf []byte) (hits []int,
 	return hits, lines
 }
 
-// walkFiles walks root, skipping directories and errors, and calls fn for each file
-// with its relative path and absolute path.
-func walkFiles(root string, fn func(relPath, absPath string) error) error {
-	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+// walkFiles walks root, skipping directories, non-code files, and errors,
+// and calls fn for each code file with its relative path and absolute path.
+// When allValidText is false, only files with valid code extensions are visited.
+// Files that are not valid UTF-8 are always skipped.
+// Returns total files seen (before filtering) and any walk error.
+func walkFiles(root string, allValidText bool, fn func(relPath, absPath string) error) (totalFiles int, err error) {
+	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Printf("failure accessing a path %q: %v\n", path, err)
 			return nil
@@ -214,22 +217,25 @@ func walkFiles(root string, fn func(relPath, absPath string) error) error {
 		} else {
 			relPath = path[len(root)+1:]
 		}
+		totalFiles++
+		if !allValidText && !normalize.HasValidExt(path) {
+			return nil
+		}
+		if !normalize.IsValidUtf8(path) {
+			return nil
+		}
 		return fn(relPath, path)
 	})
+	return
 }
 
 func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 	stats := &walkStats{}
 	scanBuf := normalize.NewScanBuf()
-	err := walkFiles(root, func(relPath, path string) error {
+	var codeFiles int
+	totalFiles, err := walkFiles(root, args.AllValidText, func(relPath, path string) error {
+		codeFiles++
 		if args.PathFilter != "" && !strings.HasPrefix(relPath, args.PathFilter) {
-			return nil
-		}
-
-		stats.totalFiles++
-
-		if (!args.AllValidText && !normalize.HasValidExt(path)) || (args.AllValidText && !normalize.IsValidUtf8(path)) {
-			stats.filesNoCode++
 			return nil
 		}
 
@@ -289,5 +295,7 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 	if err != nil {
 		log.Fatalln("error walking the path:", root, err)
 	}
+	stats.totalFiles = totalFiles
+	stats.filesNoCode = totalFiles - codeFiles
 	return stats
 }
