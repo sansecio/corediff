@@ -12,7 +12,7 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/gwillem/corediff/internal/composer"
-	"github.com/gwillem/corediff/internal/gitindex"
+	"github.com/gwillem/corediff/internal/indexer"
 	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/gwillem/corediff/internal/manifest"
 	"github.com/gwillem/corediff/internal/normalize"
@@ -100,7 +100,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // buildHTTPClient constructs an HTTP client with the auth + logging transport chain.
-func (a *dbIndexArg) buildHTTPClient(opts *gitindex.IndexOptions) (*http.Client, error) {
+func (a *dbIndexArg) buildHTTPClient(opts *indexer.IndexOptions) (*http.Client, error) {
 	var transport http.RoundTripper = http.DefaultTransport
 
 	if len(globalOpts.Verbose) >= 2 {
@@ -134,7 +134,7 @@ func (a *dbIndexArg) buildHTTPClient(opts *gitindex.IndexOptions) (*http.Client,
 // indexVersions tries git clone for all versions, falling back to zip per version.
 // OnVersionDone (if set in opts) is called after each successfully indexed version.
 // Returns the list of packages declared in composer.json "replace" sections (if any).
-func (a *dbIndexArg) indexVersions(pkg string, versions []packagist.Version, db *hashdb.HashDB, opts gitindex.IndexOptions) []string {
+func (a *dbIndexArg) indexVersions(pkg string, versions []packagist.Version, db *hashdb.HashDB, opts indexer.IndexOptions) []string {
 	if len(versions) == 0 {
 		return nil
 	}
@@ -149,17 +149,17 @@ func (a *dbIndexArg) indexVersions(pkg string, versions []packagist.Version, db 
 			}
 		}
 
-		var result *gitindex.IndexResult
+		var result *indexer.IndexResult
 		var gitErr error
 		if dbCommand.CacheDir != "" {
 			cloneDir := filepath.Join(dbCommand.CacheDir, "git", sanitizePath(pkg))
 			if err := os.MkdirAll(cloneDir, 0o755); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: creating cache dir for %s: %v\n", pkg, err)
 			} else {
-				result, gitErr = gitindex.CloneAndIndexWithDir(repoURL, cloneDir, refs, db, opts)
+				result, gitErr = indexer.CloneAndIndexWithDir(repoURL, cloneDir, refs, db, opts)
 			}
 		} else {
-			result, gitErr = gitindex.CloneAndIndex(repoURL, refs, db, opts)
+			result, gitErr = indexer.CloneAndIndex(repoURL, refs, db, opts)
 		}
 		if gitErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: git clone failed for %s: %v, falling back to zip\n", pkg, gitErr)
@@ -173,7 +173,7 @@ func (a *dbIndexArg) indexVersions(pkg string, versions []packagist.Version, db 
 			continue
 		}
 		logVerbose(fmt.Sprintf("  downloading %s (%s)", v.Version, v.Dist.URL))
-		if err := gitindex.IndexZip(v.Dist.URL, db, opts); err != nil {
+		if err := indexer.IndexZip(v.Dist.URL, db, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping %s %s: %v\n", pkg, v.Version, err)
 		} else if opts.OnVersionDone != nil {
 			opts.OnVersionDone(v.Version)
@@ -183,7 +183,7 @@ func (a *dbIndexArg) indexVersions(pkg string, versions []packagist.Version, db 
 }
 
 // indexPackage fetches versions for pkg from repoURL and indexes them into db.
-func (a *dbIndexArg) indexPackage(pkg, repoURL string, httpClient *http.Client, db *hashdb.HashDB, opts gitindex.IndexOptions) error {
+func (a *dbIndexArg) indexPackage(pkg, repoURL string, httpClient *http.Client, db *hashdb.HashDB, opts indexer.IndexOptions) error {
 	c := &packagist.Client{BaseURL: repoURL, HTTP: httpClient}
 
 	versions, err := c.Versions(pkg)
@@ -213,7 +213,7 @@ func (a *dbIndexArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *mani
 		}
 	}
 
-	opts := gitindex.IndexOptions{
+	opts := indexer.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
 		CacheDir:     dbCommand.CacheDir,
@@ -329,7 +329,7 @@ func (a *dbIndexArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manif
 		return err
 	}
 
-	opts := gitindex.IndexOptions{
+	opts := indexer.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
 		CacheDir:     dbCommand.CacheDir,
@@ -448,7 +448,7 @@ func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifes
 	}
 	fmt.Println("...")
 
-	opts := gitindex.IndexOptions{
+	opts := indexer.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
 		CacheDir:     dbCommand.CacheDir,
@@ -527,7 +527,7 @@ func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifes
 
 // updateGitURLEntry fetches new tags from a git URL and indexes any versions
 // not yet in the manifest. Used by executeUpdate for git URL manifest entries.
-func (a *dbIndexArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest.Manifest, opts gitindex.IndexOptions) {
+func (a *dbIndexArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manifest.Manifest, opts indexer.IndexOptions) {
 	var cloneDir string
 	if dbCommand.CacheDir != "" {
 		cloneDir = filepath.Join(dbCommand.CacheDir, "git", sanitizePath(url))
@@ -545,7 +545,7 @@ func (a *dbIndexArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manife
 		cloneDir = tmp
 	}
 
-	repo, refs, err := gitindex.RefsFromTags(url, cloneDir, opts)
+	repo, refs, err := indexer.RefsFromTags(url, cloneDir, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: fetching tags for %s: %v\n", url, err)
 		return
@@ -587,7 +587,7 @@ func (a *dbIndexArg) updateGitURLEntry(url string, db *hashdb.HashDB, mf *manife
 
 	pkgOpts.CollectLockDeps = true
 
-	result, err := gitindex.IndexRepo(repo, refs, db, pkgOpts)
+	result, err := indexer.IndexRepo(repo, refs, db, pkgOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: indexing %s: %v\n", url, err)
 		return
@@ -675,7 +675,7 @@ func readComposerPathPrefix(repo *git.Repository) string {
 }
 
 // indexComposerPackage indexes a single lock file package using source/dist/repo fallback.
-func (a *dbIndexArg) indexComposerPackage(pkg composer.LockPackage, repos []composer.Repository, httpClient *http.Client, db *hashdb.HashDB, opts gitindex.IndexOptions) {
+func (a *dbIndexArg) indexComposerPackage(pkg composer.LockPackage, repos []composer.Repository, httpClient *http.Client, db *hashdb.HashDB, opts indexer.IndexOptions) {
 	fmt.Printf("Indexing %s (%s)\n", pkg.Name, pkg.Version)
 	opts.PathPrefix = "vendor/" + pkg.Name + "/"
 
@@ -753,7 +753,7 @@ func isGitURL(s string) bool {
 }
 
 func (a *dbIndexArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
-	opts := gitindex.IndexOptions{
+	opts := indexer.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
 		CacheDir:     dbCommand.CacheDir,

@@ -10,7 +10,7 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/gwillem/corediff/internal/gitindex"
+	"github.com/gwillem/corediff/internal/indexer"
 	"github.com/gwillem/corediff/internal/hashdb"
 	"github.com/gwillem/corediff/internal/manifest"
 	"github.com/gwillem/corediff/internal/normalize"
@@ -158,7 +158,7 @@ func TestBuildHTTPClient_AppliesAuth(t *testing.T) {
 	t.Cleanup(func() { os.Chdir(origDir) })
 
 	arg := dbIndexArg{}
-	opts := gitindex.IndexOptions{}
+	opts := indexer.IndexOptions{}
 	client, err := arg.buildHTTPClient(&opts)
 	require.NoError(t, err)
 	require.NotNil(t, client, "buildHTTPClient should return non-nil client when auth is found")
@@ -275,7 +275,7 @@ func TestUpdateGitURLEntry(t *testing.T) {
 	defer mf.Close()
 
 	db := hashdb.New()
-	opts := gitindex.IndexOptions{NoPlatform: true}
+	opts := indexer.IndexOptions{NoPlatform: true}
 
 	arg := &dbIndexArg{NoPlatform: true}
 	arg.updateGitURLEntry(dir, db, mf, opts)
@@ -336,7 +336,7 @@ func TestUpdateGitURLEntry_WritesSubPackagesToManifest(t *testing.T) {
 	defer mf.Close()
 
 	db := hashdb.New()
-	opts := gitindex.IndexOptions{}
+	opts := indexer.IndexOptions{}
 
 	arg := &dbIndexArg{}
 	arg.updateGitURLEntry(dir, db, mf, opts)

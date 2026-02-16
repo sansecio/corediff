@@ -16,8 +16,6 @@ var (
 	}
 
 	excludePaths = []glob.Glob{
-		glob.MustCompile("vendor/aws/aws-sdk-php/src/data/**"),       // aws data
-		glob.MustCompile("vendor/symfony/intl/Resources/data/**"),     // emoji locales
 		glob.MustCompile("vendor/composer/autoload_*.php"),
 		glob.MustCompile("generated/**"),
 		glob.MustCompile("var/**"),

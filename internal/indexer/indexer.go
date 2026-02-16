@@ -1,4 +1,4 @@
-package gitindex
+package indexer
 
 import (
 	"fmt"
