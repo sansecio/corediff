@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gwillem/corediff/internal/chunker"
+	"github.com/sansecio/corediff/internal/chunker"
 )
 
 func loadFixtureLines(b *testing.B) [][]byte {

@@ -7,15 +7,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
-	"github.com/gwillem/corediff/internal/hashdb"
-	"github.com/gwillem/corediff/internal/highlight"
-	"github.com/gwillem/corediff/internal/normalize"
-	cdpath "github.com/gwillem/corediff/internal/path"
-	buildversion "github.com/gwillem/go-buildversion"
-	selfupdate "github.com/gwillem/go-selfupdate"
+	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/highlight"
+	"github.com/sansecio/corediff/internal/normalize"
+	cdpath "github.com/sansecio/corediff/internal/path"
 	"github.com/gwillem/urlfilecache"
 )
 
@@ -33,7 +30,7 @@ type scanArg struct {
 	Path struct {
 		Path []string `positional-arg-name:"<path>" required:"1"`
 	} `positional-args:"yes" description:"Scan file or dir" required:"true"`
-	Database     string `short:"d" long:"database" description:"Hash database path (default: download Willem de Groot database)"`
+	Database     string `short:"d" long:"database" description:"Hash database path (default: download Sansec BV database)"`
 	IgnorePaths  bool   `short:"i" long:"ignore-paths" description:"Scan everything, not just core paths."`
 	SuspectOnly  bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
 	AllValidText bool   `short:"t" long:"text" description:"Scan all valid UTF-8 text files, instead of just files with valid prefixes."`
@@ -41,19 +38,11 @@ type scanArg struct {
 	PathFilter   string `short:"f" long:"path-filter" description:"Applies a path filter prior to diffing (e.g. vendor/magento)"`
 }
 
-var (
-	scanCmd scanArg
+var scanCmd scanArg
 
-	selfUpdateURL   = fmt.Sprintf("https://sansec.io/downloads/%s-%s/corediff", runtime.GOOS, runtime.GOARCH)
-	corediffVersion = buildversion.String()
-)
-
-const defaultHashDBURL = "https://sansec.io/downloads/corediff-db/corediff.bin"
+const defaultHashDBURL = "https://sansec.io/downloads/corediff-db/m2.db3"
 
 func (s *scanArg) Execute(_ []string) error {
-	if restarted, err := selfupdate.UpdateRestart(selfUpdateURL); restarted || err != nil {
-		logVerbose("Restarted new version", restarted, "with error:", err)
-	}
 	if err := s.validate(); err != nil {
 		return err
 	}
@@ -63,7 +52,7 @@ func (s *scanArg) Execute(_ []string) error {
 		log.Fatal("Error loading database:", err)
 	}
 
-	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", db.Len(), " precomputed hashes. (C) 2023-2026 Willem de Groot"))
+	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", db.Len(), " precomputed hashes. (C) 2023-2026 Sansec BV"))
 	fmt.Println("Using database:", s.Database)
 
 	without := "code"
@@ -101,7 +90,9 @@ func (s *scanArg) validate() error {
 	applyVerbose()
 
 	if s.Database == "" {
+		fmt.Printf("Synchronizing default database from %s ...\n", defaultHashDBURL)
 		s.Database = urlfilecache.ToPath(defaultHashDBURL)
+		fmt.Printf("Using database %s\n", s.Database)
 	}
 
 	for i, path := range s.Path.Path {

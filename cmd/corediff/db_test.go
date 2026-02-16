@@ -10,10 +10,10 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/gwillem/corediff/internal/indexer"
-	"github.com/gwillem/corediff/internal/hashdb"
-	"github.com/gwillem/corediff/internal/manifest"
-	"github.com/gwillem/corediff/internal/normalize"
+	"github.com/sansecio/corediff/internal/indexer"
+	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/manifest"
+	"github.com/sansecio/corediff/internal/normalize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

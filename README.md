@@ -8,7 +8,7 @@ A forensic tool to quickly find unauthorized modifications in an open source cod
 
 > _"Very useful to gauge foreign codebases"_
 
-Corediff was created by Willem de Groot, specialist in Magento security and digital forensics since 2010. Corediff analysis helped to uncover numerous cases of server side payment skimming that would otherwise have gone undetected.
+Corediff was created by Sansec, specialist in Magento security and digital forensics since 2010. Corediff analysis helped to uncover numerous cases of server side payment skimming that would otherwise have gone undetected.
 
 # Usage
 
@@ -17,7 +17,7 @@ Usage:
   corediff [OPTIONS] <path>...
 
 Application Options:
-  -d, --database=     Hash database path (default: download Willem de Groot database)
+  -d, --database=     Hash database path (default: download Sansec database)
   -a, --add           Add new hashes to DB, do not check
   -m, --merge         Merge databases
   -i, --ignore-paths  Scan everything, not just core paths.
@@ -47,9 +47,8 @@ chmod 755 corediff
 Or compile from source (requires recent Go version):
 
 ```sh
-git clone https://github.com/gwillem/corediff.git
-cd corediff
-go run . <store-path>
+go install github.com/sansecio/cmd/corediff
+corediff <store-path>
 ```
 
 At the first run, `corediff` will automatically download the hash database.
@@ -84,4 +83,4 @@ Contributions welcome! Naturally, we only accept hashes from trusted sources.
 
 Created by Willem de Groot. Malware contributions welcome.
 
-(C) 2023-2026 Willem de Groot
+(C) 2023-2026 Sansec BV

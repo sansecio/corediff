@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gwillem/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/hashdb"
 	"github.com/stretchr/testify/assert"
 )
 

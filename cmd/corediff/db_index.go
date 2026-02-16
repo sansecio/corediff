@@ -11,13 +11,13 @@ import (
 	"sync"
 
 	git "github.com/go-git/go-git/v5"
-	"github.com/gwillem/corediff/internal/composer"
-	"github.com/gwillem/corediff/internal/indexer"
-	"github.com/gwillem/corediff/internal/hashdb"
-	"github.com/gwillem/corediff/internal/manifest"
-	"github.com/gwillem/corediff/internal/normalize"
-	"github.com/gwillem/corediff/internal/packagist"
-	cdpath "github.com/gwillem/corediff/internal/path"
+	"github.com/sansecio/corediff/internal/composer"
+	"github.com/sansecio/corediff/internal/indexer"
+	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/manifest"
+	"github.com/sansecio/corediff/internal/normalize"
+	"github.com/sansecio/corediff/internal/packagist"
+	cdpath "github.com/sansecio/corediff/internal/path"
 )
 
 type dbIndexArg struct {
@@ -105,7 +105,7 @@ func (a *dbIndexArg) buildHTTPClient(opts *indexer.IndexOptions) (*http.Client, 
 
 	if len(globalOpts.Verbose) >= 2 {
 		logf := func(format string, args ...any) {
-			fmt.Printf(format+"\n", args...)
+			fmt.Printf("  "+format+"\n", args...)
 		}
 		transport = &loggingTransport{base: transport, logf: logf}
 	}

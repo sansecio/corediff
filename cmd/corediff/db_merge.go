@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/gwillem/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/hashdb"
 )
 
 type dbMergeArg struct {

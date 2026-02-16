@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gwillem/corediff/internal/chunker"
+	"github.com/sansecio/corediff/internal/chunker"
 	"github.com/zeebo/xxh3"
 )
 

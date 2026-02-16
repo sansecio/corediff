@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	"github.com/gwillem/corediff/internal/hashdb"
-	"github.com/gwillem/corediff/internal/normalize"
+	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/normalize"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,4 +1,4 @@
-module github.com/gwillem/corediff
+module github.com/sansecio/corediff
 
 go 1.26
 

@@ -97,7 +97,7 @@ func readDB(path string) ([]uint64, uint32, error) {
 		return nil, 0, fmt.Errorf("database version %d uses xxhash64 which is no longer supported — please re-index", hdr.Version)
 	}
 	if hdr.Version > dbVersion {
-		return nil, 0, fmt.Errorf("database version %d is newer than supported (v%d) — please update corediff", hdr.Version, dbVersion)
+		return nil, 0, fmt.Errorf("database version %d is newer than supported (v%d) — please run `corediff update`", hdr.Version, dbVersion)
 	}
 
 	dataSize := size - headerSize

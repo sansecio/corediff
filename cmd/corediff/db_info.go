@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gwillem/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/hashdb"
 )
 
 type dbInfoArg struct{}

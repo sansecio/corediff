@@ -17,9 +17,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/gwillem/corediff/internal/composer"
-	"github.com/gwillem/corediff/internal/hashdb"
-	"github.com/gwillem/corediff/internal/normalize"
+	"github.com/sansecio/corediff/internal/composer"
+	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/normalize"
 )
 
 // subPackage represents a composer sub-package found inside a monorepo tree.

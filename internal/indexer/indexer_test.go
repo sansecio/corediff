@@ -13,9 +13,9 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/gwillem/corediff/internal/hashdb"
-	"github.com/gwillem/corediff/internal/normalize"
-	"github.com/gwillem/corediff/internal/packagist"
+	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/normalize"
+	"github.com/sansecio/corediff/internal/packagist"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
