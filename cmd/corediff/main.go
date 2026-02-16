@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	buildversion "github.com/gwillem/go-buildversion"
 	"github.com/jessevdk/go-flags"
@@ -11,8 +12,17 @@ import (
 const defaultCmd = "scan"
 
 type globalOpt struct {
-	Verbose []bool `short:"v" long:"verbose" description:"Verbose output (-v info, -vv per-file details)"`
-	Version bool   `long:"version" description:"Print version and exit"`
+	Verbose  []bool `short:"v" long:"verbose" description:"Verbose output (-v info, -vv per-file details)"`
+	Version  bool   `long:"version" description:"Print version and exit"`
+	Parallel int    `short:"p" long:"parallel" description:"Parallel workers (default: number of CPUs)" default:"0"`
+}
+
+// parallelLimit returns the configured parallelism, defaulting to GOMAXPROCS.
+func parallelLimit() int {
+	if globalOpts.Parallel > 0 {
+		return globalOpts.Parallel
+	}
+	return runtime.GOMAXPROCS(0)
 }
 
 var (

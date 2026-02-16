@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/sansecio/corediff/internal/hashdb"
 	"github.com/sansecio/corediff/internal/highlight"
@@ -224,9 +225,88 @@ func walkFiles(root string, allValidText bool, fn func(relPath, absPath string) 
 	return
 }
 
+type fileJob struct {
+	relPath string
+	absPath string
+}
+
+// scanOneFile scans a single file against the DB and writes formatted output to w.
+// Returns per-file stats to be aggregated by the caller.
+func scanOneFile(relPath, absPath string, db *hashdb.HashDB, args *scanArg, scanBuf []byte, w *strings.Builder) (changed, suspect, unchanged int, undetected string) {
+	hits, lines := scanFileWithDB(absPath, db, scanBuf)
+
+	if args.SuspectOnly {
+		var hitsFiltered []int
+		var linesFiltered [][]byte
+		for i, lineNo := range hits {
+			if highlight.ShouldHighlight(lines[i]) {
+				hitsFiltered = append(hitsFiltered, lineNo)
+				linesFiltered = append(linesFiltered, lines[i])
+			}
+		}
+		hits = hitsFiltered
+		lines = linesFiltered
+	}
+
+	if len(hits) > 0 {
+		changed = 1
+		hasSuspectLines := false
+		fmt.Fprintln(w, boldred("\n X "+relPath))
+		for i, lineNo := range hits {
+			if highlight.ShouldHighlight(lines[i]) {
+				hasSuspectLines = true
+				fmt.Fprintln(w, "  ", grey(fmt.Sprintf("%-5d", lineNo)), alarm(string(lines[i])))
+			} else if !args.SuspectOnly {
+				fmt.Fprintln(w, "  ", grey(fmt.Sprintf("%-5d", lineNo)), string(lines[i]))
+			}
+		}
+		if hasSuspectLines {
+			suspect = 1
+		}
+		fmt.Fprintln(w)
+	} else {
+		unchanged = 1
+		if len(globalOpts.Verbose) >= 1 {
+			undetected = absPath
+		}
+		if verbose {
+			fmt.Fprintln(w, green(" V "+relPath))
+		}
+	}
+	return
+}
+
 func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 	stats := &walkStats{}
-	scanBuf := normalize.NewScanBuf()
+
+	jobs := make(chan fileJob)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	limit := parallelLimit()
+	for range limit {
+		wg.Go(func() {
+			scanBuf := normalize.NewScanBuf()
+			var buf strings.Builder
+			for job := range jobs {
+				buf.Reset()
+				changed, suspect, unchanged, undetected := scanOneFile(job.relPath, job.absPath, db, args, scanBuf, &buf)
+
+				mu.Lock()
+				if buf.Len() > 0 {
+					fmt.Print(buf.String())
+				}
+				stats.filesWithChanges += changed
+				stats.filesWithSuspectLines += suspect
+				stats.filesWithoutChanges += unchanged
+				if undetected != "" {
+					stats.undetectedPaths = append(stats.undetectedPaths, undetected)
+				}
+				mu.Unlock()
+			}
+		})
+	}
+
 	var codeFiles int
 	totalFiles, err := walkFiles(root, args.AllValidText, func(relPath, path string) error {
 		codeFiles++
@@ -246,47 +326,12 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 			}
 		}
 
-		hits, lines := scanFileWithDB(path, db, scanBuf)
-
-		if args.SuspectOnly {
-			var hitsFiltered []int
-			var linesFiltered [][]byte
-			for i, lineNo := range hits {
-				if highlight.ShouldHighlight(lines[i]) {
-					hitsFiltered = append(hitsFiltered, lineNo)
-					linesFiltered = append(linesFiltered, lines[i])
-				}
-			}
-			hits = hitsFiltered
-			lines = linesFiltered
-		}
-
-		if len(hits) > 0 {
-			stats.filesWithChanges++
-			hasSuspectLines := false
-			fmt.Println(boldred("\n X " + relPath))
-			for i, lineNo := range hits {
-				if highlight.ShouldHighlight(lines[i]) {
-					hasSuspectLines = true
-					fmt.Println("  ", grey(fmt.Sprintf("%-5d", lineNo)), alarm(string(lines[i])))
-				} else if !args.SuspectOnly {
-					fmt.Println("  ", grey(fmt.Sprintf("%-5d", lineNo)), string(lines[i]))
-				}
-			}
-			if hasSuspectLines {
-				stats.filesWithSuspectLines++
-			}
-			fmt.Println()
-		} else {
-			stats.filesWithoutChanges++
-			if len(globalOpts.Verbose) >= 1 {
-				stats.undetectedPaths = append(stats.undetectedPaths, path)
-			}
-			logVerbose(green(" V " + relPath))
-		}
-
+		jobs <- fileJob{relPath: relPath, absPath: path}
 		return nil
 	})
+	close(jobs)
+	wg.Wait()
+
 	if err != nil {
 		log.Fatalln("error walking the path:", root, err)
 	}

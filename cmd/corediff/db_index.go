@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -302,9 +301,9 @@ type concurrentMerger struct {
 	db  *hashdb.HashDB
 }
 
-func newConcurrentMerger(db *hashdb.HashDB) *concurrentMerger {
+func newConcurrentMerger(db *hashdb.HashDB, limit int) *concurrentMerger {
 	return &concurrentMerger{
-		sem: make(chan struct{}, runtime.GOMAXPROCS(0)),
+		sem: make(chan struct{}, limit),
 		db:  db,
 	}
 }
@@ -392,7 +391,7 @@ func (a *dbIndexArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manif
 
 	oldSize := db.Len()
 
-	cm := newConcurrentMerger(db)
+	cm := newConcurrentMerger(db, parallelLimit())
 	for _, pkg := range newPkgs {
 		cm.run(func(pkgDB *hashdb.HashDB) {
 			a.indexComposerPackage(pkg, proj.Repos, httpClient, pkgDB, opts)
@@ -465,7 +464,7 @@ func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifes
 
 	oldSize := db.Len()
 
-	cm := newConcurrentMerger(db)
+	cm := newConcurrentMerger(db, parallelLimit())
 
 	for _, pkg := range packagistPkgs {
 		cm.run(func(pkgDB *hashdb.HashDB) {
