@@ -76,8 +76,6 @@ Pipeline: `corediff db index --packagist <package>`, `corediff db index --compos
 
 ## Concurrency
 
-- [x] Worker pool (GOMAXPROCS semaphore) for `--composer` and `--update` modes
-- [x] Documented in `doc/concurrency.md`
 - [-] Parallel git tag processing — investigated, not viable (seenBlobs dedup across versions saves ~95% of work for monorepos like magento2; parallelizing would multiply total I/O)
 
 ## Release & update
@@ -101,7 +99,4 @@ Separate tool that pipes corediff output through an LLM for risk prioritization.
 
 # manual 
 
-- [x] git indexer does not correctly identify packagist packages from monorepo (see magento2), or at least no write them to the manifest
-- [x] if packages are embedded in a monorepo, do their relative paths match the ones if they had been installed via composer? that is important since most of our target installs use composer and we only analyze a file if the relative path has been registered
-- [x] zip downloads dont end up in cache dir
 - [ ] merge various logger functions

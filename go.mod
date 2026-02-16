@@ -7,8 +7,8 @@ require (
 	github.com/go-git/go-git/v5 v5.16.5
 	github.com/gobwas/glob v0.2.3
 	github.com/gwillem/go-buildversion v0.0.0-20230402114832-b1addefa8764
-	github.com/gwillem/go-selfupdate v0.0.0-20230402110315-648e078de292
-	github.com/gwillem/urlfilecache v0.0.0-20230402105623-8ef3b7b67c13
+	github.com/gwillem/go-selfupdate v0.0.4
+	github.com/gwillem/urlfilecache v0.0.3
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/stretchr/testify v1.10.0
 	github.com/zeebo/xxh3 v1.1.0
@@ -18,7 +18,7 @@ require (
 	dario.cat/mergo v1.0.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
-	github.com/adrg/xdg v0.4.0 // indirect
+	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

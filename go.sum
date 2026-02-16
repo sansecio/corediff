@@ -7,6 +7,8 @@ github.com/ProtonMail/go-crypto v1.1.6 h1:ZcV+Ropw6Qn0AX9brlQLAUXfqLBc7Bl+f/DmNx
 github.com/ProtonMail/go-crypto v1.1.6/go.mod h1:rA3QumHc/FZ8pAHreoekgiAbzpNsfQAosU5td4SnOrE=
 github.com/adrg/xdg v0.4.0 h1:RzRqFcjH4nE5C6oTAxhBtoE2IRyjBSa62SCbyPidvls=
 github.com/adrg/xdg v0.4.0/go.mod h1:N6ag73EX4wyxeaoeHctc1mas01KZgsj5tYiAIwqJE/E=
+github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=
+github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:9AeTilPcZAjCFIImctFaOjnTIavg87rW78vTPkQqLI8=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be/go.mod h1:ySMOLuWl6zY27l47sB3qLNK6tF2fkHG55UZxx8oIVo4=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
@@ -44,8 +46,14 @@ github.com/gwillem/go-buildversion v0.0.0-20230402114832-b1addefa8764 h1:GL/gS9r
 github.com/gwillem/go-buildversion v0.0.0-20230402114832-b1addefa8764/go.mod h1:yf2A6rXn1ptErQTutA0vpEDZJG6E0b/aUnMnXelY5tU=
 github.com/gwillem/go-selfupdate v0.0.0-20230402110315-648e078de292 h1:AoF/jIYBBxpLJkyf204k6ArAFDFVKitkcOGnyYuWHco=
 github.com/gwillem/go-selfupdate v0.0.0-20230402110315-648e078de292/go.mod h1:Zv9vnDD/HDN/WCidxG2QdCEDtYIaIeUTX9yHspWZfEM=
+github.com/gwillem/go-selfupdate v0.0.4 h1:AapiWjovRroT2bA8+Q8gljF2KUtasyGEH7Oy80+1yl4=
+github.com/gwillem/go-selfupdate v0.0.4/go.mod h1:OMczWSBtlB74KS/Z9Ey0zrTnuP27N2cLXlzTRI28njc=
 github.com/gwillem/urlfilecache v0.0.0-20230402105623-8ef3b7b67c13 h1:Kuu6BZRS1uaSatweU/S5pWKkwt+QFCMb2QjJrWcvTWA=
 github.com/gwillem/urlfilecache v0.0.0-20230402105623-8ef3b7b67c13/go.mod h1:vEuNDp+GXXq7N5Anwiu1f4VQ08IGuSTGs/PaFCEno/U=
+github.com/gwillem/urlfilecache v0.0.2 h1:3UT6DPKu9SLGVBDEVmqdRVpshTn1htzgvzYwTaPV+zk=
+github.com/gwillem/urlfilecache v0.0.2/go.mod h1:/RTIJhml3kXcFAzOYJtqKSw3wlluNQ4Zv1m1ij1vw8I=
+github.com/gwillem/urlfilecache v0.0.3 h1:XeJygut0ln5uS169GazoS+hi0LS90jEX0kgIo6x7ULI=
+github.com/gwillem/urlfilecache v0.0.3/go.mod h1:/RTIJhml3kXcFAzOYJtqKSw3wlluNQ4Zv1m1ij1vw8I=
 github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 h1:BQSFePA1RWJOlocH6Fxy8MmwDt+yVQYULKfN0RoTN8A=
 github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99/go.mod h1:1lJo3i6rXxKeerYnT8Nvf0QmHCRC1n8sfWVwXF2Frvo=
 github.com/jessevdk/go-flags v1.5.0 h1:1jKYvbxEjfUl0fmqTCOfonvskHHXMjBySTLW4y9LFvc=

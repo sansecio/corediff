@@ -91,7 +91,11 @@ func (s *scanArg) validate() error {
 
 	if s.Database == "" {
 		fmt.Printf("Synchronizing default database from %s ...\n", defaultHashDBURL)
-		s.Database = urlfilecache.ToPath(defaultHashDBURL)
+		var cacheErr error
+		s.Database, cacheErr = urlfilecache.ToPath(defaultHashDBURL)
+		if cacheErr != nil {
+			return fmt.Errorf("resolving default database: %w", cacheErr)
+		}
 		fmt.Printf("Using database %s\n", s.Database)
 	}
 
