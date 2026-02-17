@@ -45,7 +45,7 @@ var (
 			glob.MustCompile("vendor/composer/autoload_*.php"),
 		},
 		DefaultDBURL: "https://sansec.io/downloads/corediff-db/m2.db3",
-		// ValidateFile is set in init() to avoid circular reference.
+		ValidateFile: validateMagentoGenerated,
 	}
 
 	Magento1 = &Platform{
@@ -65,10 +65,6 @@ var (
 	// platforms is ordered by detection priority (most specific first).
 	platforms = []*Platform{Magento2, Magento1, WordPress}
 )
-
-func init() {
-	Magento2.ValidateFile = validateMagentoGenerated
-}
 
 // Detect identifies the platform at root by checking for sentinel paths.
 // Returns nil if no known platform is detected.

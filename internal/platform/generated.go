@@ -29,34 +29,31 @@ var (
 
 func init() {
 	commonPatterns = compileAll([]string{
-		`^\s*$`,                          // empty line
-		`^\s*<\?php\s*$`,                 // <?php
-		`^\s*namespace\s+`,               // namespace declaration
-		`^\s*use\s+\\?[A-Z]`,            // use statement
-		`^\s*(abstract\s+)?class\s+`,     // class declaration
-		`^\s*interface\s+`,               // interface declaration
-		`^\s*\{`,                          // opening brace
-		`^\s*\}`,                          // closing brace
-		`^\s*\*`,                          // PHPDoc comment line
-		`^\s*/\*`,                         // block comment open
-		`^\s*\*/`,                         // block comment close
-		`^\s*//`,                          // line comment
-		`^\s*#`,                           // hash comment
-		`^\s*@`,                           // annotation
-		`^\s*public\s+function\s+`,        // public method
-		`^\s*protected\s+function\s+`,     // protected method
-		`^\s*private\s+function\s+`,       // private method (rare but valid)
-		`^\s*protected\s+\$`,              // protected property declaration
-		`^\s*return\s+`,                   // return statement
-		`^\s*return;`,                     // bare return
-		`^\s*\)`,                          // closing paren (continuation)
-		`^\s*\)\s*\{`,                     // closing paren + opening brace
-		`^\s*\)\s*;`,                      // closing paren + semicolon
-		`^\s*\?\s+\$this->`,              // ternary with $this->
-		`^\s*:\s+\$this->`,               // ternary else with $this->
-		`^\s*\$this->`,                    // $this-> property/method access
-		`^\s*implements\s+`,               // implements (continuation)
-		`^\s*extends\s+`,                  // extends (continuation)
+		`^\s*$`,                      // empty line
+		`^\s*<\?php\s*$`,             // <?php
+		`^\s*namespace\s+`,           // namespace declaration
+		`^\s*use\s+\\?[A-Z]`,         // use statement
+		`^\s*(abstract\s+)?class\s+`, // class declaration
+		`^\s*interface\s+`,           // interface declaration
+		`^\s*\{`,                     // opening brace
+		`^\s*\}`,                     // closing brace
+		`^\s*\*`,                     // PHPDoc comment line
+		`^\s*/\*`,                    // block comment open
+		`^\s*\*/`,                    // block comment close
+		`^\s*//`,                     // line comment
+		`^\s*#`,                      // hash comment
+		`^\s*@`,                      // annotation
+		`^\s*protected\s+\$`,         // protected property declaration
+		`^\s*return\s+`,              // return statement
+		`^\s*return;`,                // bare return
+		`^\s*\)`,                     // closing paren (continuation)
+		`^\s*\)\s*[{;]`,              // closing paren + opening brace
+		`^\s*\?\s+\$this->`,          // ternary with $this->
+		`^\s*:\s+\$this->`,           // ternary else with $this->
+		`^\s*\$this->`,               // $this-> property/method access
+		`^\s*implements\s+`,          // implements (continuation)
+		`^\s*extends\s+`,             // extends (continuation)
+		`^\s*(public|protected|private)\s+function\s+`, // public method
 	})
 
 	interceptorPatterns := compileAll([]string{
@@ -104,7 +101,7 @@ func init() {
 	})
 
 	extensionInterfacePatterns := compileAll([]string{
-		`^\s*public\s+function\s+(get|set)\w+\(`,  // getter/setter declarations
+		`^\s*public\s+function\s+(get|set)\w+\(`, // getter/setter declarations
 		`ExtensionAttributesInterface`,
 	})
 

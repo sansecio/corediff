@@ -34,46 +34,6 @@ In the following example, Corediff reports a malicious backdoor in `cron.php`:
 
 ![](https://buq.eu/screenshots/y76R3uN9CrCFN6GEji4uSPtM.png)
 
-## Database management
-
-### Index local paths
-
-```bash
-corediff db index -d custom.db <path>...
-```
-
-### Index Packagist packages
-
-```bash
-corediff db index -d m2.db -p brick/math composer/ca-bundle guzzlehttp/guzzle
-```
-
-The `-p` / `--packagist` flag treats positional arguments as Packagist package names. Supports version pinning with `vendor/pkg:1.2.3` or `vendor/pkg@1.2.3`.
-
-### Index from composer.json
-
-```bash
-corediff db index -d m2.db --composer /path/to/composer.json
-```
-
-### Update previously indexed packages
-
-```bash
-corediff db index -d m2.db --update
-```
-
-### Merge databases
-
-```bash
-corediff db merge -d all.db magento1.db magento2.db *.db
-```
-
-### Self-update
-
-```bash
-corediff update
-```
-
 # Installation
 
 Use our binary package (available for Linux & Mac, arm64 & amd64)
@@ -121,6 +81,6 @@ Contributions welcome! Naturally, we only accept hashes from trusted sources.
 
 # About
 
-Created by Willem de Groot. Malware contributions welcome.
+Created by Willem de Groot.
 
 (C) 2023-2026 Sansec BV
