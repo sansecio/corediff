@@ -2,7 +2,7 @@
 
 ![](https://buq.eu/screenshots/6595XfnX5wwUPzbFQGkU0GgN.png)
 
-A forensic tool to quickly find unauthorized modifications in an open source code base, such as Magento. Corediff compares each line of code with a database of 1.7M legitimate code hashes and shows you the lines that have not been seen before. A bit like [@NYT_first_said](https://maxbittker.github.io/clear-pipes/).
+A forensic tool to quickly find unauthorized modifications in an open source code base, such as Magento. Corediff compares each line of code with a database of 4.3M legitimate code hashes and shows you the lines that have not been seen before. A bit like [@NYT_first_said](https://maxbittker.github.io/clear-pipes/).
 
 > _"Corediff saved us countless hours"_
 
@@ -12,26 +12,67 @@ Corediff was created by Sansec, specialist in Magento security and digital foren
 
 # Usage
 
-```
-Usage:
-  corediff [OPTIONS] <path>...
+## Scanning
 
-Application Options:
-  -d, --database=     Hash database path (default: download Sansec database)
-  -a, --add           Add new hashes to DB, do not check
-  -m, --merge         Merge databases
-  -i, --ignore-paths  Scan everything, not just core paths.
-      --no-platform        Don't check for app root when adding hashes. Do add file paths.
-  -v, --verbose       Show what is going on
 ```
+corediff [OPTIONS] <path>...
+```
+
+Scan a codebase against the hash database. In default mode, only official platform paths are checked. Use `--ignore-paths` to scan all files.
+
+| Flag | Description |
+|------|-------------|
+| `-d, --database` | Hash database path (default: download Sansec database) |
+| `-i, --ignore-paths` | Scan everything, not just core paths |
+| `-s, --suspect` | Show suspect code lines only |
+| `-t, --text` | Scan all valid UTF-8 text files |
+| `--no-platform` | Don't check for app root |
+| `-f, --path-filter` | Filter paths before diffing (e.g. `vendor/magento`) |
+| `-v, --verbose` | Verbose output (`-vv` for per-file details) |
 
 In the following example, Corediff reports a malicious backdoor in `cron.php`:
 
 ![](https://buq.eu/screenshots/y76R3uN9CrCFN6GEji4uSPtM.png)
 
-In default mode, Corediff will only check official Magento paths. In order to find these, you should point Corediff to the root of a Magento installation.
+## Database management
 
-Alternatively you can scan all files with the `--ignore-paths` option. NB this will produce more output and requires more interpretation by a developer or forensic analyst.
+### Index local paths
+
+```bash
+corediff db index -d custom.db <path>...
+```
+
+### Index Packagist packages
+
+```bash
+corediff db index -d m2.db -p brick/math composer/ca-bundle guzzlehttp/guzzle
+```
+
+The `-p` / `--packagist` flag treats positional arguments as Packagist package names. Supports version pinning with `vendor/pkg:1.2.3` or `vendor/pkg@1.2.3`.
+
+### Index from composer.json
+
+```bash
+corediff db index -d m2.db --composer /path/to/composer.json
+```
+
+### Update previously indexed packages
+
+```bash
+corediff db index -d m2.db --update
+```
+
+### Merge databases
+
+```bash
+corediff db merge -d all.db magento1.db magento2.db *.db
+```
+
+### Self-update
+
+```bash
+corediff update
+```
 
 # Installation
 
@@ -47,7 +88,7 @@ chmod 755 corediff
 Or compile from source (requires recent Go version):
 
 ```sh
-go install github.com/sansecio/cmd/corediff
+go install github.com/sansecio/corediff/cmd/corediff@latest
 corediff <store-path>
 ```
 
@@ -59,23 +100,22 @@ At the first run, `corediff` will automatically download the hash database.
 
 ![](https://buq.eu/screenshots/RXdQ1Mmg5KliivMtK6DlHTcP.png)
 
-# Todo
-
-- [ ] Compression of hash db? Eg https://github.com/Smerity/govarint, https://github.com/bits-and-blooms/bloom
-
 # Contributing
 
 Adding or maintaining hashes?
 
 ```bash
-# Create or update custom.db with all hashes from `<path>`.
-corediff --database=custom.db --add <path>
+# Index a local path
+corediff db index -d custom.db <path>
+
+# Index Packagist packages
+corediff db index -d custom.db -p vendor/package
 
 # Merge databases for release
-corediff --database=all.db --merge magento1.db magento2.db *.db
+corediff db merge -d all.db magento1.db magento2.db *.db
 ```
 
-In some cases, it is better to not add file paths to the hash database. All paths found in the database will be examined and reported in default mode. Should many varieties exist for a particular file (such as in DI/compiled code), we would rather exclude its scanning from default output, until we can be reasonably certain to have coverage for 99%+ versions out there. So for volatile paths, use the `--add --ignore-paths` options.
+In some cases, it is better to not add file paths to the hash database. All paths found in the database will be examined and reported in default mode. Should many varieties exist for a particular file (such as in DI/compiled code), we would rather exclude its scanning from default output, until we can be reasonably certain to have coverage for 99%+ versions out there. So for volatile paths, use the `--ignore-paths` flag when indexing.
 
 Contributions welcome! Naturally, we only accept hashes from trusted sources.
 
