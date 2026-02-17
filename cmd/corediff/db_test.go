@@ -10,22 +10,23 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/sansecio/corediff/internal/indexer"
 	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/indexer"
 	"github.com/sansecio/corediff/internal/manifest"
 	"github.com/sansecio/corediff/internal/normalize"
+	"github.com/sansecio/corediff/internal/platform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDBAdd(t *testing.T) {
 	db := hashdb.New()
-	addPath("../../fixture/docroot", db, false, false, false)
+	addPath("../../fixture/docroot", db, false, false, platform.Magento2)
 
 	// Should have line hashes
 	assert.Greater(t, db.Len(), 0)
 
-	// Should also have path hashes (ignorePaths=false, noPlatform=false)
+	// Should also have path hashes (ignorePaths=false, platform!=nil)
 	// Check that at least one known path hash is present
 	assert.True(t, db.Contains(normalize.PathHash("test.php")))
 	assert.True(t, db.Contains(normalize.PathHash("highlight.php")))
@@ -33,12 +34,12 @@ func TestDBAdd(t *testing.T) {
 
 func TestDBAddNoPlatform(t *testing.T) {
 	dbWith := hashdb.New()
-	addPath("../../fixture/docroot", dbWith, false, false, false)
+	addPath("../../fixture/docroot", dbWith, false, false, platform.Magento2)
 
 	dbWithout := hashdb.New()
-	addPath("../../fixture/docroot", dbWithout, false, false, true)
+	addPath("../../fixture/docroot", dbWithout, false, false, nil)
 
-	// noPlatform=true should have fewer hashes (no path hashes)
+	// plat=nil should have fewer hashes (no path hashes)
 	assert.Greater(t, dbWith.Len(), dbWithout.Len())
 
 	// Path hashes should NOT be present in noPlatform DB
@@ -89,7 +90,7 @@ func TestDBSaveAndReopen(t *testing.T) {
 	dbPath := filepath.Join(tmp, "sample.db")
 
 	db := hashdb.New()
-	addPath("../../fixture/docroot", db, false, false, true)
+	addPath("../../fixture/docroot", db, false, false, nil)
 	require.NoError(t, db.Save(dbPath))
 
 	// Verify it can be reopened

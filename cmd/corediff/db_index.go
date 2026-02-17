@@ -18,7 +18,7 @@ import (
 	"github.com/sansecio/corediff/internal/manifest"
 	"github.com/sansecio/corediff/internal/normalize"
 	"github.com/sansecio/corediff/internal/packagist"
-	cdpath "github.com/sansecio/corediff/internal/path"
+	"github.com/sansecio/corediff/internal/platform"
 )
 
 type dbIndexArg struct {
@@ -741,20 +741,24 @@ func lockToVersion(pkg composer.LockPackage) packagist.Version {
 }
 
 func (a *dbIndexArg) executeLocalPaths(db *hashdb.HashDB, dbPath string) error {
+	var plat *platform.Platform
 	for _, p := range a.Path.Path {
 		fi, fiErr := os.Stat(p)
 		if fiErr != nil {
 			return fmt.Errorf("error stat'ing %q: %w", p, fiErr)
 		}
-		if fi.IsDir() && !a.NoPlatform && !a.IgnorePaths && !cdpath.IsAppRoot(p) {
-			return fmt.Errorf("path %q does not seem to be an application root path. Try again with proper root path, or use --no-platform", p)
+		if fi.IsDir() && !a.NoPlatform && !a.IgnorePaths {
+			plat = platform.Detect(p)
+			if plat == nil {
+				return fmt.Errorf("path %q does not seem to be an application root path. Try again with proper root path, or use --no-platform", p)
+			}
 		}
 	}
 
 	oldSize := db.Len()
 	for _, p := range a.Path.Path {
 		fmt.Println("Calculating checksums for", p)
-		addPath(p, db, a.IgnorePaths, a.AllValidText, a.NoPlatform)
+		addPath(p, db, a.IgnorePaths, a.AllValidText, plat)
 		fmt.Println()
 	}
 
@@ -812,10 +816,10 @@ func (a *dbIndexArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string,
 	return nil
 }
 
-func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool, noPlatform bool) {
+func addPath(root string, db *hashdb.HashDB, ignorePaths bool, allValidText bool, plat *platform.Platform) {
 	scanBuf := normalize.NewScanBuf()
 	_, err := walkFiles(root, allValidText, func(relPath, path string) error {
-		if !ignorePaths && !noPlatform && path != root && !cdpath.IsExcluded(relPath) {
+		if !ignorePaths && plat != nil && path != root && !plat.IsExcluded(relPath) {
 			db.Add(normalize.PathHash(relPath))
 		}
 

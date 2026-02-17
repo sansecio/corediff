@@ -1,21 +1,22 @@
 package path
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
-func TestIsExcluded(t *testing.T) {
-	tests := []struct {
-		arg  string
-		want bool
-	}{
-		{"generated/x/y/z.php", true},
-		{"x/y/z.php", false},
-		{"/vendor/x/y/z", false},
+func TestExists(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "exists.txt")
+	if err := os.WriteFile(existing, nil, 0o644); err != nil {
+		t.Fatal(err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.arg, func(t *testing.T) {
-			if got := IsExcluded(tt.arg); got != tt.want {
-				t.Errorf("IsExcluded() = %v, want %v", got, tt.want)
-			}
-		})
+
+	if !Exists(existing) {
+		t.Error("Exists() = false for existing file")
+	}
+	if Exists(filepath.Join(dir, "nope.txt")) {
+		t.Error("Exists() = true for non-existing file")
 	}
 }

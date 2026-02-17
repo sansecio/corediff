@@ -14,6 +14,7 @@ import (
 	"github.com/sansecio/corediff/internal/highlight"
 	"github.com/sansecio/corediff/internal/normalize"
 	cdpath "github.com/sansecio/corediff/internal/path"
+	"github.com/sansecio/corediff/internal/platform"
 	"github.com/gwillem/urlfilecache"
 )
 
@@ -37,10 +38,13 @@ type scanArg struct {
 	AllValidText bool   `short:"t" long:"text" description:"Scan all valid UTF-8 text files, instead of just files with valid prefixes."`
 	NoPlatform   bool   `long:"no-platform" description:"Don't check for app root when scanning."`
 	PathFilter   string `short:"f" long:"path-filter" description:"Applies a path filter prior to diffing (e.g. vendor/magento)"`
+
+	platform *platform.Platform // detected platform (set during validate)
 }
 
 var scanCmd scanArg
 
+// defaultHashDBURL is used as a fallback when no platform-specific DB URL is available.
 const defaultHashDBURL = "https://sansec.io/downloads/corediff-db/m2.db3"
 
 func (s *scanArg) Execute(_ []string) error {
@@ -90,16 +94,6 @@ func (s *scanArg) validate() error {
 	var err error
 	applyVerbose()
 
-	if s.Database == "" {
-		fmt.Printf("Synchronizing default database from %s ...\n", defaultHashDBURL)
-		var cacheErr error
-		s.Database, cacheErr = urlfilecache.ToPath(defaultHashDBURL)
-		if cacheErr != nil {
-			return fmt.Errorf("resolving default database: %w", cacheErr)
-		}
-		fmt.Printf("Using database %s\n", s.Database)
-	}
-
 	for i, path := range s.Path.Path {
 		if !cdpath.Exists(path) {
 			return fmt.Errorf("path %q does not exist", path)
@@ -124,12 +118,29 @@ func (s *scanArg) validate() error {
 			continue
 		}
 
-		if !s.IgnorePaths && !s.NoPlatform && !cdpath.IsAppRoot(path) {
-			return fmt.Errorf("path %q does not seem to be an application root path, so we cannot check official root paths. Try again with proper root path, or do a full scan with --ignore-paths", path)
+		if !s.IgnorePaths && !s.NoPlatform {
+			s.platform = platform.Detect(path)
+			if s.platform == nil {
+				return fmt.Errorf("path %q does not seem to be an application root path, so we cannot check official root paths. Try again with proper root path, or do a full scan with --ignore-paths", path)
+			}
 		}
 
 		s.Path.Path[i] = path
 	}
+
+	if s.Database == "" {
+		dbURL := defaultHashDBURL
+		if s.platform != nil && s.platform.DefaultDBURL != "" {
+			dbURL = s.platform.DefaultDBURL
+		}
+		fmt.Printf("Synchronizing default database from %s ...\n", dbURL)
+		s.Database, err = urlfilecache.ToPath(dbURL)
+		if err != nil {
+			return fmt.Errorf("resolving default database: %w", err)
+		}
+		fmt.Printf("Using database %s\n", s.Database)
+	}
+
 	return nil
 }
 
@@ -226,15 +237,21 @@ func walkFiles(root string, allValidText bool, fn func(relPath, absPath string) 
 }
 
 type fileJob struct {
-	relPath string
-	absPath string
+	relPath      string
+	absPath      string
+	useValidator bool // true = run platform validator instead of DB scan
 }
 
 // scanOneFile scans a single file against the DB and writes formatted output to w.
 // Returns per-file stats to be aggregated by the caller.
 func scanOneFile(relPath, absPath string, db *hashdb.HashDB, args *scanArg, scanBuf []byte, w *strings.Builder) (changed, suspect, unchanged int, undetected string) {
 	hits, lines := scanFileWithDB(absPath, db, scanBuf)
+	return formatHits(relPath, absPath, hits, lines, args, w)
+}
 
+// formatHits writes formatted output for a set of hits/lines and returns per-file stats.
+// Used by both scanOneFile (DB scan) and platform validator results.
+func formatHits(relPath, absPath string, hits []int, lines [][]byte, args *scanArg, w *strings.Builder) (changed, suspect, unchanged int, undetected string) {
 	if args.SuspectOnly {
 		var hitsFiltered []int
 		var linesFiltered [][]byte
@@ -290,7 +307,15 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 			var buf strings.Builder
 			for job := range jobs {
 				buf.Reset()
-				changed, suspect, unchanged, undetected := scanOneFile(job.relPath, job.absPath, db, args, scanBuf, &buf)
+				var changed, suspect, unchanged int
+				var undetected string
+
+				if job.useValidator && args.platform != nil && args.platform.ValidateFile != nil {
+					_, hits, lines := args.platform.ValidateFile(job.relPath, job.absPath, scanBuf)
+					changed, suspect, unchanged, undetected = formatHits(job.relPath, job.absPath, hits, lines, args, &buf)
+				} else {
+					changed, suspect, unchanged, undetected = scanOneFile(job.relPath, job.absPath, db, args, scanBuf, &buf)
+				}
 
 				mu.Lock()
 				if buf.Len() > 0 {
@@ -317,9 +342,17 @@ func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
 		// Only do path checking for non-root elements
 		if path != root && !args.IgnorePaths {
 			foundInDb := db.Contains(normalize.PathHash(relPath))
-			shouldExclude := cdpath.IsExcluded(relPath)
+			shouldExclude := args.platform != nil && args.platform.IsExcluded(relPath)
 
 			if !foundInDb || shouldExclude {
+				// Before skipping as custom code, check if the platform
+				// validator can handle this file.
+				if args.platform != nil && args.platform.ValidateFile != nil {
+					if handled, _, _ := args.platform.ValidateFile(relPath, "", nil); handled {
+						jobs <- fileJob{relPath: relPath, absPath: path, useValidator: true}
+						return nil
+					}
+				}
 				stats.filesCustomCode++
 				logVerbose(grey(" ? ", relPath))
 				return nil
