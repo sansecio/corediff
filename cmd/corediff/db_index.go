@@ -5,14 +5,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/sansecio/corediff/internal/composer"
-	"github.com/sansecio/corediff/internal/indexer"
 	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/indexer"
 	"github.com/sansecio/corediff/internal/manifest"
 	"github.com/sansecio/corediff/internal/normalize"
 	"github.com/sansecio/corediff/internal/packagist"
@@ -56,14 +58,22 @@ func (a *dbIndexArg) Execute(_ []string) error {
 	applyVerbose()
 
 	dbPath := dbCommand.Database
-	db, err := hashdb.Open(dbPath)
-	if os.IsNotExist(err) {
-		db = hashdb.New()
-		err = nil
-	}
+	db, err := hashdb.OpenForWrite(dbPath)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
+
+	// Flush progress on Ctrl-C so hashes computed so far are not lost.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	go func() {
+		<-sigCh
+		fmt.Fprintln(os.Stderr, "\nInterrupted, flushing progress...")
+		db.Close()
+		os.Exit(1)
+	}()
+	defer signal.Stop(sigCh)
 
 	if a.Packagist != "" || a.Composer != "" || a.Update || (len(a.Path.Path) == 1 && isGitURL(a.Path.Path[0])) {
 		mf, mfErr := manifest.Load(manifest.PathFromDB(dbPath))
@@ -285,10 +295,10 @@ func (a *dbIndexArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *mani
 
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
-		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
-		return db.Save(dbPath)
+		fmt.Printf("Computed %d new hashes (saved incrementally to %s)\n", newHashes, dbPath)
+	} else {
+		fmt.Println("Found no new code hashes...")
 	}
-	fmt.Println("Found no new code hashes...")
 	return nil
 }
 
@@ -404,10 +414,10 @@ func (a *dbIndexArg) executeComposer(db *hashdb.HashDB, dbPath string, mf *manif
 
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
-		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
-		return db.Save(dbPath)
+		fmt.Printf("Computed %d new hashes (saved incrementally to %s)\n", newHashes, dbPath)
+	} else {
+		fmt.Println("Found no new code hashes...")
 	}
-	fmt.Println("Found no new code hashes...")
 	return nil
 }
 
@@ -517,10 +527,10 @@ func (a *dbIndexArg) executeUpdate(db *hashdb.HashDB, dbPath string, mf *manifes
 
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
-		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
-		return db.Save(dbPath)
+		fmt.Printf("Computed %d new hashes (saved incrementally to %s)\n", newHashes, dbPath)
+	} else {
+		fmt.Println("All packages up to date, no new hashes")
 	}
-	fmt.Println("All packages up to date, no new hashes")
 	return nil
 }
 
@@ -726,10 +736,10 @@ func (a *dbIndexArg) executeLocalPaths(db *hashdb.HashDB, dbPath string) error {
 	}
 
 	if db.Len() != oldSize {
-		fmt.Println("Computed", db.Len()-oldSize, "new hashes, saving to", dbPath, "..")
-		return db.Save(dbPath)
+		fmt.Printf("Computed %d new hashes (saved incrementally to %s)\n", db.Len()-oldSize, dbPath)
+	} else {
+		fmt.Println("Found no new code hashes...")
 	}
-	fmt.Println("Found no new code hashes...")
 	return nil
 }
 
@@ -772,10 +782,10 @@ func (a *dbIndexArg) executeGitURL(url string, db *hashdb.HashDB, dbPath string,
 
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
-		fmt.Printf("Computed %d new hashes, saving to %s ..\n", newHashes, dbPath)
-		return db.Save(dbPath)
+		fmt.Printf("Computed %d new hashes (saved incrementally to %s)\n", newHashes, dbPath)
+	} else {
+		fmt.Println("Found no new code hashes...")
 	}
-	fmt.Println("Found no new code hashes...")
 	return nil
 }
 

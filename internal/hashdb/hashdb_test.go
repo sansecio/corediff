@@ -162,6 +162,213 @@ func TestOpenAndMutate(t *testing.T) {
 	assert.Equal(t, 3, loaded.Len())
 }
 
+func TestOpenForWriteNewFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "new.db")
+
+	db, err := OpenForWrite(path)
+	require.NoError(t, err)
+	assert.Equal(t, 0, db.Len())
+
+	db.Add(10)
+	db.Add(20)
+	db.Add(30)
+	require.NoError(t, db.Close())
+
+	// Verify readable via Open
+	loaded, err := Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, 3, loaded.Len())
+	assert.True(t, loaded.Contains(10))
+	assert.True(t, loaded.Contains(20))
+	assert.True(t, loaded.Contains(30))
+}
+
+func TestOpenForWriteExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "existing.db")
+
+	// Create initial DB with Save
+	db := New()
+	db.Add(1)
+	db.Add(2)
+	require.NoError(t, db.Save(path))
+
+	// Reopen for write, add more
+	db2, err := OpenForWrite(path)
+	require.NoError(t, err)
+	assert.Equal(t, 2, db2.Len())
+	assert.True(t, db2.Contains(1))
+	assert.True(t, db2.Contains(2))
+
+	db2.Add(3)
+	db2.Add(4)
+	require.NoError(t, db2.Close())
+
+	// Verify all hashes present
+	loaded, err := Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, 4, loaded.Len())
+	for _, h := range []uint64{1, 2, 3, 4} {
+		assert.True(t, loaded.Contains(h))
+	}
+}
+
+func TestOpenForWriteMergeDurability(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "merge.db")
+
+	db, err := OpenForWrite(path)
+	require.NoError(t, err)
+
+	// Add initial hashes
+	db.Add(1)
+	db.Add(2)
+
+	// Merge a batch (simulates per-package merge)
+	other := New()
+	other.Add(3)
+	other.Add(4)
+	other.Add(2) // duplicate — should be ignored
+	db.Merge(other)
+
+	require.NoError(t, db.Close())
+
+	loaded, err := Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, 4, loaded.Len())
+	for _, h := range []uint64{1, 2, 3, 4} {
+		assert.True(t, loaded.Contains(h))
+	}
+}
+
+func TestOpenForWriteTrailingBytesRecovery(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "trailing.db")
+
+	// Create a valid DB with 2 hashes
+	db := New()
+	db.Add(10)
+	db.Add(20)
+	require.NoError(t, db.Save(path))
+
+	// Append 5 garbage bytes to simulate crash mid-append
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
+	require.NoError(t, err)
+	_, err = f.Write([]byte{0xDE, 0xAD, 0xBE, 0xEF, 0x00})
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	// readDB should still work (ignores trailing bytes beyond count)
+	loaded, err := Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, 2, loaded.Len())
+	assert.True(t, loaded.Contains(10))
+	assert.True(t, loaded.Contains(20))
+
+	// OpenForWrite should truncate trailing garbage
+	db2, err := OpenForWrite(path)
+	require.NoError(t, err)
+	assert.Equal(t, 2, db2.Len())
+
+	db2.Add(30)
+	require.NoError(t, db2.Close())
+
+	// Verify clean file
+	loaded2, err := Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, 3, loaded2.Len())
+	assert.True(t, loaded2.Contains(10))
+	assert.True(t, loaded2.Contains(20))
+	assert.True(t, loaded2.Contains(30))
+}
+
+func TestOpenForWriteTrailingFullHashRecovery(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "trailing_hash.db")
+
+	// Create a valid DB with 2 hashes
+	db := New()
+	db.Add(10)
+	db.Add(20)
+	require.NoError(t, db.Save(path))
+
+	// Append a full 8-byte hash but don't update count (simulates crash after append, before count update)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
+	require.NoError(t, err)
+	var buf [8]byte
+	binary.LittleEndian.PutUint64(buf[:], 99)
+	_, err = f.Write(buf[:])
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	// OpenForWrite should recover — count says 2, extra hash is truncated
+	db2, err := OpenForWrite(path)
+	require.NoError(t, err)
+	assert.Equal(t, 2, db2.Len())
+	assert.False(t, db2.Contains(99)) // the uncommitted hash is lost
+
+	require.NoError(t, db2.Close())
+}
+
+func TestOpenForWriteCloseIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "idem.db")
+
+	db, err := OpenForWrite(path)
+	require.NoError(t, err)
+	db.Add(1)
+
+	require.NoError(t, db.Close())
+	require.NoError(t, db.Close()) // second close should be no-op
+}
+
+func TestOpenForWriteFlushMultiple(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "flush.db")
+
+	db, err := OpenForWrite(path)
+	require.NoError(t, err)
+
+	db.Add(1)
+	require.NoError(t, db.Flush())
+
+	db.Add(2)
+	require.NoError(t, db.Flush())
+
+	db.Add(3)
+	require.NoError(t, db.Close())
+
+	loaded, err := Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, 3, loaded.Len())
+}
+
+func TestOpenForWriteDeduplication(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dedup.db")
+
+	db, err := OpenForWrite(path)
+	require.NoError(t, err)
+
+	db.Add(42)
+	db.Add(42) // duplicate — should not be written to file again
+	db.Add(42)
+	require.NoError(t, db.Close())
+
+	loaded, err := Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, 1, loaded.Len())
+}
+
+func TestFlushOnReadOnlyDB(t *testing.T) {
+	db := New()
+	db.Add(1)
+	// Flush and Close on a read-only DB should be no-ops
+	require.NoError(t, db.Flush())
+	require.NoError(t, db.Close())
+}
+
 func createBenchDB(b *testing.B, n int) string {
 	b.Helper()
 	dir := b.TempDir()
