@@ -7,7 +7,7 @@ require (
 	github.com/go-git/go-git/v5 v5.16.5
 	github.com/gobwas/glob v0.2.3
 	github.com/gwillem/go-buildversion v0.0.0-20230402114832-b1addefa8764
-	github.com/gwillem/go-selfupdate v0.0.4
+	github.com/gwillem/go-selfupdate v0.0.5
 	github.com/gwillem/urlfilecache v0.0.3
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/stretchr/testify v1.10.0
