@@ -1,0 +1,341 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/sansecio/corediff/internal/hashdb"
+	"github.com/sansecio/corediff/internal/highlight"
+	"github.com/sansecio/corediff/internal/normalize"
+	cdpath "github.com/sansecio/corediff/internal/path"
+	"github.com/gwillem/urlfilecache"
+)
+
+type walkStats struct {
+	totalFiles            int
+	filesWithSuspectLines int
+	filesWithChanges      int
+	filesWithoutChanges   int
+	filesNoCode           int
+	filesCustomCode       int
+	undetectedPaths       []string
+}
+
+type scanArg struct {
+	Path struct {
+		Path []string `positional-arg-name:"<path>" required:"1"`
+	} `positional-args:"yes" description:"Scan file or dir" required:"true"`
+	Database     string `short:"d" long:"database" description:"Hash database path (default: download Sansec BV database)"`
+	IgnorePaths  bool   `short:"i" long:"ignore-paths" description:"Scan everything, not just core paths."`
+	SuspectOnly  bool   `short:"s" long:"suspect" description:"Show suspect code lines only."`
+	AllValidText bool   `short:"t" long:"text" description:"Scan all valid UTF-8 text files, instead of just files with valid prefixes."`
+	NoPlatform   bool   `long:"no-platform" description:"Don't check for app root when scanning."`
+	PathFilter   string `short:"f" long:"path-filter" description:"Applies a path filter prior to diffing (e.g. vendor/magento)"`
+}
+
+var scanCmd scanArg
+
+const defaultHashDBURL = "https://sansec.io/downloads/corediff-db/m2.db3"
+
+func (s *scanArg) Execute(_ []string) error {
+	if err := s.validate(); err != nil {
+		return err
+	}
+
+	db, err := hashdb.Open(s.Database)
+	if err != nil {
+		log.Fatal("Error loading database:", err)
+	}
+
+	fmt.Println(boldwhite("Corediff ", corediffVersion, " loaded ", db.Len(), " precomputed hashes. (C) 2023-2026 Sansec BV"))
+	fmt.Println("Using database:", s.Database)
+
+	without := "code"
+	if s.AllValidText {
+		without = "text"
+	}
+	for _, path := range s.Path.Path {
+		stats := walkPath(path, db, s)
+		fmt.Println("\n===============================================================================")
+		fmt.Println(" Corediff completed scanning", stats.totalFiles, "files in", path)
+		fmt.Println(" - Files with unrecognized lines      :", boldred(fmt.Sprintf("%7d", stats.filesWithChanges)), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithChanges))))
+		fmt.Println(" - Files with suspect lines           :", warn(fmt.Sprintf("%7d", stats.filesWithSuspectLines)), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithSuspectLines))))
+		fmt.Println(" - Files with only recognized lines   :", green(fmt.Sprintf("%7d", stats.filesWithoutChanges)), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesWithoutChanges))))
+		fmt.Println(" - Files with custom code             :", fmt.Sprintf("%7d", stats.filesCustomCode), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesCustomCode))))
+		fmt.Println(" - Files without", without, "                :", fmt.Sprintf("%7d", stats.filesNoCode), grey(fmt.Sprintf("%8.2f%%", stats.percentage(stats.filesNoCode))))
+		logVerbose("Undetected paths:")
+		for _, p := range stats.undetectedPaths {
+			logVerbose("  ", p)
+		}
+	}
+
+	return nil
+}
+
+func init() {
+	cli.AddCommand("scan", "Scan file or dir", "Scan file or dir", &scanCmd)
+}
+
+func (stats *walkStats) percentage(of int) float64 {
+	return float64(of) / float64(stats.totalFiles) * 100
+}
+
+func (s *scanArg) validate() error {
+	var err error
+	applyVerbose()
+
+	if s.Database == "" {
+		fmt.Printf("Synchronizing default database from %s ...\n", defaultHashDBURL)
+		var cacheErr error
+		s.Database, cacheErr = urlfilecache.ToPath(defaultHashDBURL)
+		if cacheErr != nil {
+			return fmt.Errorf("resolving default database: %w", cacheErr)
+		}
+		fmt.Printf("Using database %s\n", s.Database)
+	}
+
+	for i, path := range s.Path.Path {
+		if !cdpath.Exists(path) {
+			return fmt.Errorf("path %q does not exist", path)
+		}
+
+		path, err = filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("error getting absolute path: %w", err)
+		}
+		path, err = filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("error eval'ing symlinks for %q: %w", path, err)
+		}
+
+		// Skip app root check for single files
+		fi, fiErr := os.Stat(path)
+		if fiErr != nil {
+			return fmt.Errorf("error stat'ing %q: %w", path, fiErr)
+		}
+		if !fi.IsDir() {
+			s.Path.Path[i] = path
+			continue
+		}
+
+		if !s.IgnorePaths && !s.NoPlatform && !cdpath.IsAppRoot(path) {
+			return fmt.Errorf("path %q does not seem to be an application root path, so we cannot check official root paths. Try again with proper root path, or do a full scan with --ignore-paths", path)
+		}
+
+		s.Path.Path[i] = path
+	}
+	return nil
+}
+
+func parseFile(path string, lineCB func([]byte), scanBuf []byte) error {
+	fh, err := os.Open(path)
+	if err != nil && os.IsNotExist(err) {
+		return fmt.Errorf("file does not exist: %s", path)
+	} else if err != nil {
+		return fmt.Errorf("open error on %s: %s", path, err)
+	}
+	defer fh.Close()
+	return parseFH(fh, lineCB, scanBuf)
+}
+
+func parseFH(r io.Reader, lineCB func([]byte), scanBuf []byte) error {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(scanBuf, normalize.MaxTokenSize)
+	for i := 0; scanner.Scan(); i++ {
+		lineCB(scanner.Bytes())
+	}
+	return scanner.Err()
+}
+
+// addFileHashes opens path and adds all line hashes to db using HashReader.
+// Returns the number of new hashes added.
+func addFileHashes(path string, db *hashdb.HashDB, scanBuf []byte) int {
+	fh, err := os.Open(path)
+	if err != nil {
+		log.Println("err: ", err)
+		return 0
+	}
+	defer fh.Close()
+	var added int
+	normalize.HashReader(fh, func(h uint64, _ []byte) {
+		if !db.Contains(h) {
+			db.Add(h)
+			added++
+		}
+	}, scanBuf)
+	return added
+}
+
+// scanFileWithDB scans path and returns line numbers and content of lines
+// whose hashes are not in db.
+func scanFileWithDB(path string, db *hashdb.HashDB, scanBuf []byte) (hits []int, lines [][]byte) {
+	c := 0
+	err := parseFile(path, func(line []byte) {
+		c++
+		normalize.HashLine(line, func(h uint64, chunk []byte) bool {
+			if !db.Contains(h) {
+				hits = append(hits, c)
+				lines = append(lines, chunk)
+				return true // continue to find all mismatched chunks
+			}
+			return true
+		})
+	}, scanBuf)
+	if err != nil {
+		log.Println("err: ", err)
+	}
+	return hits, lines
+}
+
+// walkFiles walks root, skipping directories, non-code files, and errors,
+// and calls fn for each code file with its relative path and absolute path.
+// When allValidText is false, only files with valid code extensions are visited.
+// Files that are not valid UTF-8 are always skipped.
+// Returns total files seen (before filtering) and any walk error.
+func walkFiles(root string, allValidText bool, fn func(relPath, absPath string) error) (totalFiles int, err error) {
+	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Printf("failure accessing a path %q: %v\n", path, err)
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		var relPath string
+		if path == root {
+			relPath = root
+		} else {
+			relPath = path[len(root)+1:]
+		}
+		totalFiles++
+		if !allValidText && !normalize.HasValidExt(path) {
+			return nil
+		}
+		if !normalize.IsValidUtf8(path) {
+			return nil
+		}
+		return fn(relPath, path)
+	})
+	return
+}
+
+type fileJob struct {
+	relPath string
+	absPath string
+}
+
+// scanOneFile scans a single file against the DB and writes formatted output to w.
+// Returns per-file stats to be aggregated by the caller.
+func scanOneFile(relPath, absPath string, db *hashdb.HashDB, args *scanArg, scanBuf []byte, w *strings.Builder) (changed, suspect, unchanged int, undetected string) {
+	hits, lines := scanFileWithDB(absPath, db, scanBuf)
+
+	if args.SuspectOnly {
+		var hitsFiltered []int
+		var linesFiltered [][]byte
+		for i, lineNo := range hits {
+			if highlight.ShouldHighlight(lines[i]) {
+				hitsFiltered = append(hitsFiltered, lineNo)
+				linesFiltered = append(linesFiltered, lines[i])
+			}
+		}
+		hits = hitsFiltered
+		lines = linesFiltered
+	}
+
+	if len(hits) > 0 {
+		changed = 1
+		hasSuspectLines := false
+		fmt.Fprintln(w, boldred("\n X "+relPath))
+		for i, lineNo := range hits {
+			if highlight.ShouldHighlight(lines[i]) {
+				hasSuspectLines = true
+				fmt.Fprintln(w, "  ", grey(fmt.Sprintf("%-5d", lineNo)), alarm(string(lines[i])))
+			} else if !args.SuspectOnly {
+				fmt.Fprintln(w, "  ", grey(fmt.Sprintf("%-5d", lineNo)), string(lines[i]))
+			}
+		}
+		if hasSuspectLines {
+			suspect = 1
+		}
+		fmt.Fprintln(w)
+	} else {
+		unchanged = 1
+		if len(globalOpts.Verbose) >= 1 {
+			undetected = absPath
+		}
+		if verbose {
+			fmt.Fprintln(w, green(" V "+relPath))
+		}
+	}
+	return
+}
+
+func walkPath(root string, db *hashdb.HashDB, args *scanArg) *walkStats {
+	stats := &walkStats{}
+
+	jobs := make(chan fileJob)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	limit := parallelLimit()
+	for range limit {
+		wg.Go(func() {
+			scanBuf := normalize.NewScanBuf()
+			var buf strings.Builder
+			for job := range jobs {
+				buf.Reset()
+				changed, suspect, unchanged, undetected := scanOneFile(job.relPath, job.absPath, db, args, scanBuf, &buf)
+
+				mu.Lock()
+				if buf.Len() > 0 {
+					fmt.Print(buf.String())
+				}
+				stats.filesWithChanges += changed
+				stats.filesWithSuspectLines += suspect
+				stats.filesWithoutChanges += unchanged
+				if undetected != "" {
+					stats.undetectedPaths = append(stats.undetectedPaths, undetected)
+				}
+				mu.Unlock()
+			}
+		})
+	}
+
+	var codeFiles int
+	totalFiles, err := walkFiles(root, args.AllValidText, func(relPath, path string) error {
+		codeFiles++
+		if args.PathFilter != "" && !strings.HasPrefix(relPath, args.PathFilter) {
+			return nil
+		}
+
+		// Only do path checking for non-root elements
+		if path != root && !args.IgnorePaths {
+			foundInDb := db.Contains(normalize.PathHash(relPath))
+			shouldExclude := cdpath.IsExcluded(relPath)
+
+			if !foundInDb || shouldExclude {
+				stats.filesCustomCode++
+				logVerbose(grey(" ? ", relPath))
+				return nil
+			}
+		}
+
+		jobs <- fileJob{relPath: relPath, absPath: path}
+		return nil
+	})
+	close(jobs)
+	wg.Wait()
+
+	if err != nil {
+		log.Fatalln("error walking the path:", root, err)
+	}
+	stats.totalFiles = totalFiles
+	stats.filesNoCode = totalFiles - codeFiles
+	return stats
+}
