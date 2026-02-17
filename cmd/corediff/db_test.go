@@ -104,16 +104,16 @@ func TestDBAdd_PackagistValidation(t *testing.T) {
 	dbPath := filepath.Join(tmp, "test.db")
 	dbCommand.Database = dbPath
 
-	t.Run("packagist+path", func(t *testing.T) {
-		arg := dbIndexArg{Packagist: "vendor/pkg"}
-		arg.Path.Path = []string{"/some/path"}
+	t.Run("packagist without args", func(t *testing.T) {
+		arg := dbIndexArg{Packagist: true}
 		err := arg.Execute(nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot combine")
+		assert.Contains(t, err.Error(), "--packagist requires at least one package name")
 	})
 
 	t.Run("composer+packagist", func(t *testing.T) {
-		arg := dbIndexArg{Packagist: "vendor/pkg", Composer: "/some/composer.json"}
+		arg := dbIndexArg{Packagist: true, Composer: "/some/composer.json"}
+		arg.Path.Path = []string{"vendor/pkg"}
 		err := arg.Execute(nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cannot combine")

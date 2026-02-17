@@ -22,7 +22,7 @@ import (
 )
 
 type dbIndexArg struct {
-	Packagist    string `short:"p" long:"packagist" description:"Index Packagist package (vendor/package)"`
+	Packagist    bool   `short:"p" long:"packagist" description:"Treat positional args as Packagist packages"`
 	Composer     string `long:"composer" description:"Index all packages from composer.json + lock"`
 	Update       bool   `short:"u" long:"update" description:"Re-check all previously indexed packages for new versions"`
 	IgnorePaths  bool   `short:"i" long:"ignore-paths" description:"Don't store file paths in DB."`
@@ -34,9 +34,19 @@ type dbIndexArg struct {
 }
 
 func (a *dbIndexArg) Execute(_ []string) error {
-	// Mutual exclusion: only one of --packagist, --composer, --update, or <path>
+	// Mutual exclusion validation
+	if a.Packagist && a.Composer != "" {
+		return fmt.Errorf("cannot combine --packagist and --composer; use only one")
+	}
+	if a.Packagist && a.Update {
+		return fmt.Errorf("cannot combine --packagist and --update; use only one")
+	}
+	if a.Packagist && len(a.Path.Path) == 0 {
+		return fmt.Errorf("--packagist requires at least one package name as positional argument")
+	}
+
 	modes := 0
-	if a.Packagist != "" {
+	if a.Packagist {
 		modes++
 	}
 	if a.Composer != "" {
@@ -45,7 +55,7 @@ func (a *dbIndexArg) Execute(_ []string) error {
 	if a.Update {
 		modes++
 	}
-	if len(a.Path.Path) > 0 {
+	if !a.Packagist && len(a.Path.Path) > 0 {
 		modes++
 	}
 	if modes > 1 {
@@ -75,21 +85,21 @@ func (a *dbIndexArg) Execute(_ []string) error {
 	}()
 	defer signal.Stop(sigCh)
 
-	if a.Packagist != "" || a.Composer != "" || a.Update || (len(a.Path.Path) == 1 && isGitURL(a.Path.Path[0])) {
+	if a.Packagist || a.Composer != "" || a.Update || (len(a.Path.Path) == 1 && isGitURL(a.Path.Path[0])) {
 		mf, mfErr := manifest.Load(manifest.PathFromDB(dbPath))
 		if mfErr != nil {
 			return fmt.Errorf("loading manifest: %w", mfErr)
 		}
 		defer mf.Close()
 
-		if len(a.Path.Path) == 1 && isGitURL(a.Path.Path[0]) {
+		if len(a.Path.Path) == 1 && !a.Packagist && isGitURL(a.Path.Path[0]) {
 			return a.executeGitURL(a.Path.Path[0], db, dbPath, mf)
 		}
 		if a.Update {
 			return a.executeUpdate(db, dbPath, mf)
 		}
-		if a.Packagist != "" {
-			return a.executePackagist(db, dbPath, mf)
+		if a.Packagist {
+			return a.executePackagist(a.Path.Path, db, dbPath, mf)
 		}
 		return a.executeComposer(db, dbPath, mf)
 	}
@@ -207,21 +217,7 @@ func (a *dbIndexArg) indexPackage(pkg, repoURL string, httpClient *http.Client, 
 	return nil
 }
 
-func (a *dbIndexArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
-	// Parse optional version pin: "vendor/pkg:1.2.3" or "vendor/pkg@1.2.3"
-	pkg := a.Packagist
-	var pinVersion string
-	if idx := strings.LastIndexAny(pkg, ":@"); idx > 0 {
-		pkg, pinVersion = pkg[:idx], pkg[idx+1:]
-	}
-
-	// Track bare (unpinned) packages for automatic updates
-	if pinVersion == "" {
-		if err := mf.MarkTracked(pkg); err != nil {
-			return fmt.Errorf("marking tracked: %w", err)
-		}
-	}
-
+func (a *dbIndexArg) executePackagist(pkgs []string, db *hashdb.HashDB, dbPath string, mf *manifest.Manifest) error {
 	opts := indexer.IndexOptions{
 		NoPlatform:   a.NoPlatform,
 		AllValidText: a.AllValidText,
@@ -234,64 +230,91 @@ func (a *dbIndexArg) executePackagist(db *hashdb.HashDB, dbPath string, mf *mani
 		return err
 	}
 
-	c := &packagist.Client{HTTP: httpClient}
-
-	versions, err := c.Versions(pkg)
-	if err != nil {
-		return fmt.Errorf("fetching versions for %s: %w", pkg, err)
-	}
-
-	if pinVersion != "" {
-		var filtered []packagist.Version
-		for _, v := range versions {
-			if v.Version == pinVersion {
-				filtered = append(filtered, v)
-				break
-			}
-		}
-		if len(filtered) == 0 {
-			return fmt.Errorf("version %q not found for %s", pinVersion, pkg)
-		}
-		versions = filtered
-	}
-
-	// Filter out already-indexed versions
-	total := len(versions)
-	var newVersions []packagist.Version
-	for _, v := range versions {
-		if !mf.IsIndexed(pkg, v.Version) {
-			newVersions = append(newVersions, v)
-		}
-	}
-	versions = newVersions
-
-	if skipped := total - len(versions); skipped > 0 {
-		fmt.Printf("Skipping %d already-indexed versions for %s\n", skipped, pkg)
-	}
-	if len(versions) == 0 {
-		fmt.Printf("All %d versions of %s already indexed\n", total, pkg)
-		return nil
-	}
-
-	logVerbose(fmt.Sprintf("Indexing %d new versions for %s", len(versions), pkg))
+	// Install go-git HTTP transport once before concurrent operations
+	opts.InstallHTTPTransport()
 
 	oldSize := db.Len()
-	opts.PathPrefix = "vendor/" + pkg + "/"
-	opts.OnVersionDone = func(version string) {
-		if err := mf.MarkIndexed(pkg, version); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
-		}
-	}
 
-	replaces := a.indexVersions(pkg, versions, db, opts)
-	for _, r := range replaces {
-		if err := mf.MarkReplaced(r); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
-		}
+	cm := newConcurrentMerger(db, parallelLimit())
+	for _, raw := range pkgs {
+		cm.run(func(pkgDB *hashdb.HashDB) {
+			// Parse optional version pin: "vendor/pkg:1.2.3" or "vendor/pkg@1.2.3"
+			pkg := raw
+			var pinVersion string
+			if idx := strings.LastIndexAny(pkg, ":@"); idx > 0 {
+				pkg, pinVersion = pkg[:idx], pkg[idx+1:]
+			}
+
+			// Track bare (unpinned) packages for automatic updates
+			if pinVersion == "" {
+				if err := mf.MarkTracked(pkg); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: marking tracked %s: %v\n", pkg, err)
+					return
+				}
+			}
+
+			c := &packagist.Client{HTTP: httpClient}
+			versions, err := c.Versions(pkg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: fetching versions for %s: %v\n", pkg, err)
+				return
+			}
+
+			if pinVersion != "" {
+				var filtered []packagist.Version
+				for _, v := range versions {
+					if v.Version == pinVersion {
+						filtered = append(filtered, v)
+						break
+					}
+				}
+				if len(filtered) == 0 {
+					fmt.Fprintf(os.Stderr, "warning: version %q not found for %s\n", pinVersion, pkg)
+					return
+				}
+				versions = filtered
+			}
+
+			// Filter out already-indexed versions
+			total := len(versions)
+			var newVersions []packagist.Version
+			for _, v := range versions {
+				if !mf.IsIndexed(pkg, v.Version) {
+					newVersions = append(newVersions, v)
+				}
+			}
+			versions = newVersions
+
+			if skipped := total - len(versions); skipped > 0 {
+				fmt.Printf("Skipping %d already-indexed versions for %s\n", skipped, pkg)
+			}
+			if len(versions) == 0 {
+				fmt.Printf("All %d versions of %s already indexed\n", total, pkg)
+				return
+			}
+
+			logVerbose(fmt.Sprintf("Indexing %d new versions for %s", len(versions), pkg))
+
+			pkgOpts := opts
+			pkgOpts.PathPrefix = "vendor/" + pkg + "/"
+			pkgOpts.OnVersionDone = func(version string) {
+				if err := mf.MarkIndexed(pkg, version); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+				}
+			}
+
+			replaces := a.indexVersions(pkg, versions, pkgDB, pkgOpts)
+			for _, r := range replaces {
+				if err := mf.MarkReplaced(r); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: manifest write: %v\n", err)
+				}
+			}
+			if len(replaces) > 0 {
+				fmt.Printf("Recorded %d replaced packages for %s in manifest\n", len(replaces), pkg)
+			}
+		})
 	}
-	if len(replaces) > 0 {
-		fmt.Printf("Recorded %d replaced packages in manifest\n", len(replaces))
-	}
+	cm.wait()
 
 	newHashes := db.Len() - oldSize
 	if newHashes > 0 {
